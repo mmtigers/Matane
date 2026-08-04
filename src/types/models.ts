@@ -13,7 +13,7 @@ export interface Venue {
   id: string;
   place_id: string | null;
   name: string;
-  location: LatLng;
+  location: LatLng | null;
   address: string | null;
   nearest_station: string | null;
 }

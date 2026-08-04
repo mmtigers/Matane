@@ -1,69 +1,216 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  createCheckInByVenueName,
+  createInstantCheckIn,
+  scheduleBackgroundSync,
+  undoCheckIn,
+} from "@/lib/db/checkin";
+import type { LocalVenue } from "@/lib/db/localDb";
+import { searchVenuesLocal, useIncompleteVisits, useSuggestedVenue } from "@/lib/db/queries";
+import { getCurrentLocation } from "@/lib/geo";
+import { getCurrentMode, type HomeMode } from "@/lib/time";
+
+function subscribeNoop() {
+  return () => {};
+}
+
+// SSRはサーバーのタイムゾーンに依存するため実行しない。クライアントでの
+// hydration後に一度だけ実際の時間帯を確定させる(useSyncExternalStoreの標準パターン)。
+function getServerMode(): HomeMode | null {
+  return null;
+}
+
+export default function HomePage() {
+  const detectedMode = useSyncExternalStore(subscribeNoop, getCurrentMode, getServerMode);
+  const [modeOverride, setModeOverride] = useState<HomeMode | null>(null);
+  const mode = modeOverride ?? detectedMode;
+
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [undoVisitId, setUndoVisitId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<LocalVenue[]>([]);
+  const router = useRouter();
+
+  const incompleteVisits = useIncompleteVisits();
+  const suggestion = useSuggestedVenue();
+
+  useEffect(() => {
+    if (!undoVisitId) return;
+    const timer = setTimeout(() => {
+      setUndoVisitId(null);
+      scheduleBackgroundSync();
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [undoVisitId]);
+
+  useEffect(() => {
+    let active = true;
+    searchVenuesLocal(searchQuery).then((results) => {
+      if (active) setSearchResults(results);
+    });
+    return () => {
+      active = false;
+    };
+  }, [searchQuery]);
+
+  async function handleInstantCheckIn() {
+    setCheckingIn(true);
+    try {
+      const location = await getCurrentLocation();
+      const visitId = await createInstantCheckIn(location);
+      setUndoVisitId(visitId);
+    } catch (error) {
+      console.error(error);
+      window.alert("位置情報を取得できませんでした。設定をご確認ください。");
+    } finally {
+      setCheckingIn(false);
+    }
+  }
+
+  async function handleUndo() {
+    if (!undoVisitId) return;
+    await undoCheckIn(undoVisitId);
+    setUndoVisitId(null);
+  }
+
+  async function goToRegisterFor(name: string) {
+    const visitId = await createCheckInByVenueName(name);
+    router.push(`/visits/${visitId}/register`);
+  }
+
+  if (mode === null) return null;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="mx-auto flex max-w-md flex-col gap-8 px-4 pt-8">
+      <header className="flex items-center justify-between">
+        <h1 className="text-lg font-bold">Matane</h1>
+        <button
+          type="button"
+          onClick={() => setModeOverride(mode === "night" ? "day" : "night")}
+          className="text-xs text-neutral-500 underline underline-offset-2"
+        >
+          {mode === "night" ? "☀️ 日中モードに切替" : "🌙 夜間モードに切替"}
+        </button>
+      </header>
+
+      {mode === "night" ? (
+        <section className="flex flex-col items-center gap-4 py-8">
+          <button
+            type="button"
+            onClick={handleInstantCheckIn}
+            disabled={checkingIn}
+            className="flex h-48 w-48 flex-col items-center justify-center gap-2 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
+          >
+            {checkingIn ? (
+              <span className="text-base font-semibold">登録中...</span>
+            ) : (
+              <>
+                <span className="text-4xl">📍</span>
+                <span className="text-base font-semibold">今ココを瞬録</span>
+              </>
+            )}
+          </button>
+        </section>
+      ) : (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold text-amber-400">⚠️ 昨日の肉付け待ち</h2>
+          {!incompleteVisits || incompleteVisits.length === 0 ? (
+            <p className="text-sm text-neutral-500">肉付け待ちの訪問はありません。</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {incompleteVisits.map((visit) => (
+                <li key={visit.id}>
+                  <Link
+                    href={`/visits/${visit.id}/register`}
+                    className="flex items-center justify-between rounded-xl bg-neutral-900 px-4 py-3"
+                  >
+                    <span>{visit.venue?.name || "店名未設定"}</span>
+                    <span className="text-xs text-neutral-500">
+                      {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      <section className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-neutral-400" htmlFor="venue-search">
+          後から登録（店名・駅名で検索）
+        </label>
+        <input
+          id="venue-search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="店名または駅名"
+          className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+        {searchQuery.trim() && (
+          <ul className="flex flex-col gap-2">
+            {searchResults.map((venue) => (
+              <li key={venue.id}>
+                <button
+                  type="button"
+                  onClick={() => goToRegisterFor(venue.name)}
+                  className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-left"
+                >
+                  {venue.name}
+                  {venue.nearest_station && (
+                    <span className="ml-2 text-xs text-neutral-500">
+                      {venue.nearest_station}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+            <li>
+              <button
+                type="button"
+                onClick={() => goToRegisterFor(searchQuery.trim())}
+                className="w-full rounded-xl border border-dashed border-neutral-700 px-4 py-3 text-left text-neutral-400"
+              >
+                「{searchQuery.trim()}」で新規チェックイン
+              </button>
+            </li>
+          </ul>
+        )}
+      </section>
+
+      {suggestion?.venue && (
+        <section className="rounded-2xl bg-neutral-900 p-4">
+          <h2 className="text-sm font-semibold text-amber-400">今日どこ行く？</h2>
+          <p className="mt-2 text-base font-medium">{suggestion.venue.name}</p>
+          <p className="text-xs text-neutral-500">
+            前回: {new Date(suggestion.visited_at).toLocaleDateString("ja-JP")}
+            ・しばらく行っていません
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href={`/venues/${suggestion.venue.id}`}
+            className="mt-3 inline-block rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-black"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            店舗詳細を見る
+          </Link>
+        </section>
+      )}
+
+      {undoVisitId && (
+        <div className="fixed inset-x-4 bottom-24 z-50 flex items-center justify-between rounded-xl bg-neutral-800 px-4 py-3 shadow-lg">
+          <span className="text-sm">チェックインしました</span>
+          <button
+            type="button"
+            onClick={handleUndo}
+            className="text-sm font-semibold text-amber-400"
           >
-            Documentation
-          </a>
+            取り消す
+          </button>
         </div>
-      </main>
-    </div>
+      )}
+    </main>
   );
 }

@@ -14,9 +14,11 @@ class MataneDB extends Dexie {
 
   constructor() {
     super("matane-db");
+    // IndexedDBはboolean型をキーにできないため、is_completedはインデックスせず
+    // 取得後にJS側でフィルタする（件数が少ない個人利用データのため問題ない）。
     this.version(1).stores({
       venues: "id, place_id, syncStatus",
-      visits: "id, venue_id, visited_at, is_completed, syncStatus",
+      visits: "id, venue_id, visited_at, syncStatus",
     });
   }
 }
