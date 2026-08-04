@@ -1,0 +1,18 @@
+{
+  "name": "Matane",
+  "short_name": "またね",
+  "description": "「またね」と言えるお店が、すぐ決まる。次にどこへ行くかを最短で決める、自分専用の飲み会コンシェルジュ。",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f12",
+  "theme_color": "#0f0f12",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

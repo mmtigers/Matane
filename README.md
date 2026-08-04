@@ -1,0 +1,53 @@
+# Matane（マタネ）
+
+「またね」と言えるお店が、すぐ決まる。次にどこへ行くかを最短で決める、自分専用の飲み会コンシェルジュ。
+
+詳細な要求仕様は [docs/PRD.md](./docs/PRD.md) を参照。
+
+## 技術スタック
+
+- Next.js (App Router, TypeScript, Tailwind CSS)
+- Supabase (Postgres / Auth / Storage)
+- Dexie.js (IndexedDB) — オフライン優先のローカルキャッシュ
+- 手書きService Worker (`public/sw.js`) — PWAオフラインシェル
+
+## セットアップ
+
+```bash
+npm install
+cp .env.local.example .env.local
+# .env.local に Supabase の URL / anon key を設定
+npm run dev
+```
+
+Supabase側のテーブル作成は [supabase/schema.sql](./supabase/schema.sql) をSQL Editorで実行する。
+
+## ディレクトリ構成
+
+```
+src/
+  app/            App Routerのページ・レイアウト
+  components/     共有UIコンポーネント
+  lib/
+    supabase/     Supabaseクライアント
+    db/           Dexieローカルキャッシュ・オフライン同期ロジック
+  types/          Venue / Visit などの型定義
+supabase/
+  schema.sql      Venues / Visits テーブル定義・RLSポリシー
+docs/
+  PRD.md          プロダクト要求仕様書
+```
+
+## オフライン同期の仕組み
+
+1. 「今ココを瞬録」等の操作は `src/lib/db/checkin.ts` を通じて即座にDexie(IndexedDB)へ書き込まれる（`syncStatus: "pending"`）。
+2. `src/lib/db/sync.ts` がオンライン復帰時・起動時に `syncStatus: "pending"` のレコードをSupabaseへupsertし、成功したものを `"synced"` に更新する。
+3. IDはクライアント側でUUID生成し、ローカルとクラウドで同一IDを使うため、同期はべき等（idempotent）に行える。
+
+## 開発の原則（要約）
+
+- 入力を増やさない。自動取得できるものは自動取得する。
+- 「あとで入力できる」なら今は入力させない（一次登録＝仮登録、二次登録＝肉付け）。
+- 迷ったら機能を削る。
+
+詳細は [docs/PRD.md](./docs/PRD.md) の「開発・設計の原則」を参照。
