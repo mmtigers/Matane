@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { AuthStatus } from "@/components/AuthStatus";
 import {
   createCheckInByVenueName,
   createInstantCheckIn,
@@ -86,15 +87,18 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-8 px-4 pt-8">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">Matane</h1>
-        <button
-          type="button"
-          onClick={() => setModeOverride(mode === "night" ? "day" : "night")}
-          className="text-xs text-neutral-500 underline underline-offset-2"
-        >
-          {mode === "night" ? "☀️ 日中モードに切替" : "🌙 夜間モードに切替"}
-        </button>
+      <header className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold">Matane</h1>
+          <button
+            type="button"
+            onClick={() => setModeOverride(mode === "night" ? "day" : "night")}
+            className="text-xs text-neutral-500 underline underline-offset-2"
+          >
+            {mode === "night" ? "☀️ 日中モードに切替" : "🌙 夜間モードに切替"}
+          </button>
+        </div>
+        <AuthStatus />
       </header>
 
       {mode === "night" ? (

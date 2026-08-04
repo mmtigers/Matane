@@ -9,7 +9,8 @@ function toVenueRecord(venue: LocalVenue): Venue {
   return { id, place_id, name, location, address, nearest_station };
 }
 
-function toVisitRecord(visit: LocalVisit): Visit {
+// visitsテーブルはRLSで自分のuser_idの行のみ読み書きできるため、認証ユーザーIDを付与する。
+function toVisitRecord(visit: LocalVisit, userId: string): Visit & { user_id: string } {
   const {
     id,
     venue_id,
@@ -37,6 +38,7 @@ function toVisitRecord(visit: LocalVisit): Visit {
     best_photo,
     memo,
     ai_tags,
+    user_id: userId,
   };
 }
 
@@ -49,6 +51,10 @@ export async function syncPendingChanges() {
   syncing = true;
   try {
     const supabase = getSupabaseClient();
+
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) return; // 未ログインの間はRLSにより書き込めないため同期しない
 
     const pendingVenues = await localDb.venues
       .where("syncStatus")
@@ -68,7 +74,7 @@ export async function syncPendingChanges() {
       .toArray();
 
     for (const visit of pendingVisits) {
-      const { error } = await supabase.from("visits").upsert(toVisitRecord(visit));
+      const { error } = await supabase.from("visits").upsert(toVisitRecord(visit, userId));
       if (!error) {
         await localDb.visits.update(visit.id, { syncStatus: "synced" });
       }

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { BottomNav } from "@/components/BottomNav";
+import { AuthProvider } from "@/lib/auth/AuthProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,6 +20,13 @@ export const metadata: Metadata = {
   description:
     "「またね」と言えるお店が、すぐ決まる。次にどこへ行くかを最短で決める、自分専用の飲み会コンシェルジュ。",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -42,8 +50,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100">
         <ServiceWorkerRegister />
-        <div className="flex-1 pb-20">{children}</div>
-        <BottomNav />
+        <AuthProvider>
+          <div className="flex-1 pb-20">{children}</div>
+          <BottomNav />
+        </AuthProvider>
       </body>
     </html>
   );

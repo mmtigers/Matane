@@ -22,6 +22,16 @@ npm run dev
 
 Supabase側のテーブル作成は [supabase/schema.sql](./supabase/schema.sql) をSQL Editorで実行する。
 
+### 認証（マジックリンク/Email OTP）
+
+パスワード不要のマジックリンク認証を採用している。Supabaseダッシュボードで以下を設定すること。
+
+1. 「Authentication」→「URL Configuration」で **Site URL** と **Redirect URLs** に
+   アプリのURL（開発時は `http://localhost:3000`、本番は実際のドメイン）を追加する。
+   未設定だとログインリンクのリダイレクトが失敗する。
+2. ログインしなくてもこの端末内での記録・閲覧は可能（オフラインファースト）。
+   ログインするとSupabaseへの同期が有効になり、他の端末ともデータを共有できる。
+
 ## ディレクトリ構成
 
 ```
