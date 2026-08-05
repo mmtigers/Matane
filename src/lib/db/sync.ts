@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { uploadVisitPhotoIfNeeded } from "@/lib/storage";
 import type { LatLng, Visit } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 
@@ -169,9 +170,20 @@ export async function syncPendingChanges() {
       .toArray();
 
     if (pendingVisits.length > 0) {
-      const { error } = await supabase
-        .from("visits")
-        .upsert(pendingVisits.map((v) => toVisitRecord(v, userId)));
+      // 写真(data URL)はDB行に埋め込まず、先にStorageへアップロードして軽量な
+      // URLに差し替えてからupsertする(ローカルのbest_photoはdata URLのまま維持)。
+      const visitRecords = await Promise.all(
+        pendingVisits.map(async (visit) => {
+          const uploadedPhoto = await uploadVisitPhotoIfNeeded(
+            visit.id,
+            userId,
+            visit.best_photo
+          );
+          return toVisitRecord({ ...visit, best_photo: uploadedPhoto }, userId);
+        })
+      );
+
+      const { error } = await supabase.from("visits").upsert(visitRecords);
 
       if (error) {
         console.warn(`visits同期に失敗しました(${pendingVisits.length}件):`, error);
@@ -179,6 +191,18 @@ export async function syncPendingChanges() {
         await localDb.visits.bulkUpdate(
           pendingVisits.map((v) => ({ key: v.id, changes: { syncStatus: "synced" as const } }))
         );
+      }
+    }
+
+    const pendingDeletes = await localDb.pendingVisitDeletes.toArray();
+    if (pendingDeletes.length > 0) {
+      const ids = pendingDeletes.map((d) => d.id);
+      const { error } = await supabase.from("visits").delete().in("id", ids);
+
+      if (error) {
+        console.warn(`visits削除の同期に失敗しました(${ids.length}件):`, error);
+      } else {
+        await localDb.pendingVisitDeletes.bulkDelete(ids);
       }
     }
   } catch (error) {
@@ -228,6 +252,11 @@ export async function pullFromCloud() {
       remoteVenues = (data ?? []) as CloudVenueRow[];
     }
 
+    // ローカルで削除済み・削除待ちのVisitをpullで復活させないようにする。
+    const pendingDeleteIds = new Set(
+      (await localDb.pendingVisitDeletes.toArray()).map((d) => d.id)
+    );
+
     for (const row of remoteVenues) {
       const local = await localDb.venues.get(row.id);
       if (local?.syncStatus === "pending") continue;
@@ -235,6 +264,7 @@ export async function pullFromCloud() {
     }
 
     for (const row of (remoteVisits ?? []) as CloudVisitRow[]) {
+      if (pendingDeleteIds.has(row.id)) continue;
       const local = await localDb.visits.get(row.id);
       if (local?.syncStatus === "pending") continue;
       await localDb.visits.put(fromVisitRecord(row));

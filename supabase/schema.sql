@@ -6,7 +6,7 @@ create extension if not exists "uuid-ossp";
 create table if not exists venues (
   id uuid primary key default uuid_generate_v4(),
   place_id text unique,
-  name text not null,
+  name text not null check (char_length(name) <= 100),
   location geography(point, 4326),
   address text,
   nearest_station text,
@@ -25,8 +25,10 @@ create table if not exists visits (
   budget text,
   alcohol_tags text[] not null default '{}',
   quietness text,
+  -- 写真本体はSupabase Storageの visit-photos バケットに保存し、ここにはURLのみを
+  -- 持たせる(一覧クエリがbase64画像ごと転送するのを防ぐため)。
   best_photo text,
-  memo text,
+  memo text check (memo is null or char_length(memo) <= 2000),
   ai_tags text[] not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -80,3 +82,39 @@ create policy "visits are deletable by owner"
   on visits for delete
   to authenticated
   using (auth.uid() = user_id);
+
+-- 「厳選の1枚」写真の保存先。パスは `${userId}/${visitId}.jpg` 形式を前提とし、
+-- 先頭フォルダ名をauth.uid()と突き合わせて所有者以外の読み書きを防ぐ
+-- (bucketはpublic=trueのため読み取り自体は誰でも可能。友人と写真を共有する
+-- Phase4のシナリオを見越した設計)。
+insert into storage.buckets (id, name, public)
+values ('visit-photos', 'visit-photos', true)
+on conflict (id) do nothing;
+
+create policy "visit-photos are readable by anyone"
+  on storage.objects for select
+  using (bucket_id = 'visit-photos');
+
+create policy "visit-photos are uploadable by their owner"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'visit-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "visit-photos are updatable by their owner"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'visit-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "visit-photos are deletable by their owner"
+  on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'visit-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );

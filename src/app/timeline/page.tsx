@@ -2,18 +2,16 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ALCOHOL_ICONS, ALCOHOL_OPTIONS, type AlcoholTag } from "@/constants/choices";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { estimateAverageBudget } from "@/lib/budget";
 import { deleteVisit } from "@/lib/db/checkin";
 import { useTimelineVisits, type VisitWithVenue } from "@/lib/db/queries";
 import { formatMonthLabel, monthKey } from "@/lib/time";
-import type { AlcoholTag } from "@/types/models";
 
-const ALCOHOL_FILTERS: { icon: string; tag: AlcoholTag }[] = [
-  { icon: "🍺", tag: "ビール" },
-  { icon: "🥃", tag: "ハイボール" },
-  { icon: "🍶", tag: "日本酒" },
-  { icon: "🍷", tag: "ワイン" },
-];
+const ALCOHOL_FILTERS = ALCOHOL_OPTIONS.map((tag) => ({ tag, icon: ALCOHOL_ICONS[tag] }));
+
+const MONTHS_PER_PAGE = 6;
 
 interface MonthGroup {
   key: string;
@@ -41,6 +39,8 @@ function groupByMonth(visits: VisitWithVenue[]): MonthGroup[] {
 export default function TimelinePage() {
   const visits = useTimelineVisits();
   const [activeTag, setActiveTag] = useState<AlcoholTag | null>(null);
+  const [visibleMonthCount, setVisibleMonthCount] = useState(MONTHS_PER_PAGE);
+  const [deleteTarget, setDeleteTarget] = useState<VisitWithVenue | null>(null);
 
   const filtered = useMemo(() => {
     if (!visits) return [];
@@ -49,11 +49,13 @@ export default function TimelinePage() {
   }, [visits, activeTag]);
 
   const monthGroups = useMemo(() => groupByMonth(filtered), [filtered]);
+  const visibleGroups = monthGroups.slice(0, visibleMonthCount);
+  const hasMore = monthGroups.length > visibleMonthCount;
 
-  async function handleDelete(visit: VisitWithVenue) {
-    const label = visit.venue?.name || "この記録";
-    if (!window.confirm(`${label}を削除しますか？この操作は取り消せません。`)) return;
-    await deleteVisit(visit.id);
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    await deleteVisit(deleteTarget.id);
+    setDeleteTarget(null);
   }
 
   return (
@@ -68,10 +70,11 @@ export default function TimelinePage() {
             key={tag}
             type="button"
             onClick={() => setActiveTag((current) => (current === tag ? null : tag))}
-            className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-colors ${
+            className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-colors focus:ring-2 focus:ring-amber-400 ${
               activeTag === tag ? "bg-amber-400" : "bg-neutral-900"
             }`}
             aria-label={tag}
+            aria-pressed={activeTag === tag}
           >
             {icon}
           </button>
@@ -79,12 +82,12 @@ export default function TimelinePage() {
       </div>
 
       {!visits ? (
-        <p className="text-sm text-neutral-500">読み込み中...</p>
+        <p className="text-sm text-neutral-400">読み込み中...</p>
       ) : monthGroups.length === 0 ? (
-        <p className="text-sm text-neutral-500">まだ訪問記録がありません。</p>
+        <p className="text-sm text-neutral-400">まだ訪問記録がありません。</p>
       ) : (
         <div className="flex flex-col gap-6">
-          {monthGroups.map((group) => {
+          {visibleGroups.map((group) => {
             const avgBudget = estimateAverageBudget(
               group.visits.flatMap((visit) => (visit.budget ? [visit.budget] : []))
             );
@@ -127,7 +130,7 @@ export default function TimelinePage() {
                               <span className="ml-2 text-xs text-amber-400">盛り付け待ち</span>
                             )}
                           </p>
-                          <p className="text-xs text-neutral-500">
+                          <p className="text-xs text-neutral-400">
                             {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
                             {visit.alcohol_tags.length > 0 &&
                               ` ・ ${visit.alcohol_tags.join("/")}`}
@@ -136,9 +139,9 @@ export default function TimelinePage() {
                       </Link>
                       <button
                         type="button"
-                        onClick={() => handleDelete(visit)}
+                        onClick={() => setDeleteTarget(visit)}
                         aria-label="削除"
-                        className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-neutral-500 active:bg-neutral-800"
+                        className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-neutral-400 focus:ring-2 focus:ring-amber-400 active:bg-neutral-800"
                       >
                         🗑
                       </button>
@@ -148,8 +151,25 @@ export default function TimelinePage() {
               </section>
             );
           })}
+
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setVisibleMonthCount((count) => count + MONTHS_PER_PAGE)}
+              className="rounded-full bg-neutral-900 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400"
+            >
+              もっと見る
+            </button>
+          )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        message={`${deleteTarget?.venue?.name || "この記録"}を削除しますか？この操作は取り消せません。`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </main>
   );
 }

@@ -1,8 +1,9 @@
-import { getSupabaseClient } from "@/lib/supabase/client";
 import type { LatLng } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 import { searchVenuesLocal } from "./queries";
 import { syncPendingChanges } from "./sync";
+
+const VENUE_NAME_MAX_LENGTH = 100;
 
 type VisitChoiceFields = Pick<
   LocalVisit,
@@ -43,7 +44,7 @@ export async function createInstantCheckIn(location: LatLng) {
 // ホーム画面共通の「後から登録（店名・駅名検索）」用。既存の店名と完全一致する場合は
 // キャッシュ済みのVenueを再利用し、無ければ入力名でプレースホルダーVenueを作る。
 export async function createCheckInByVenueName(name: string) {
-  const trimmed = name.trim();
+  const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
   if (!trimmed) throw new Error("店名を入力してください");
 
   const matches = await searchVenuesLocal(trimmed);
@@ -96,7 +97,8 @@ export async function undoCheckIn(visitId: string) {
 
 // GPSのみで店名が未確定の瞬録に、盛り付け画面から店名を確定させる。
 export async function setVenueName(venueId: string, name: string) {
-  await localDb.venues.update(venueId, { name: name.trim(), syncStatus: "pending" });
+  const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
+  await localDb.venues.update(venueId, { name: trimmed, syncStatus: "pending" });
 }
 
 // 盛り付け(二次登録)画面の保存。選択項目を反映し、is_completedをtrueにする。
@@ -135,22 +137,19 @@ export async function duplicateVisit(previous: LocalVisit) {
   return visitId;
 }
 
-// タイムラインからの削除(誤登録の取り消し用)。既にSupabaseへ同期済みの場合はクラウド側も
-// あわせて削除を試みるが、失敗してもローカルの記録は削除する(オフライン中の削除を優先する)。
+// タイムラインからの削除(誤登録の取り消し用)。ローカルからは即座に削除する。
+// 既にSupabaseへ同期済みだった場合は削除キューに積み、sync.tsの通常サイクルで
+// クラウド側の削除も処理する(オフライン中でも取りこぼさず、失敗時は次回再試行される)。
 export async function deleteVisit(visitId: string) {
   const visit = await localDb.visits.get(visitId);
   if (!visit) return;
 
-  if (visit.syncStatus === "synced") {
-    try {
-      const supabase = getSupabaseClient();
-      await supabase.from("visits").delete().eq("id", visitId);
-    } catch (error) {
-      console.warn("Supabase上のVisit削除に失敗しました(ローカルからは削除します):", error);
-    }
-  }
-
   await localDb.visits.delete(visitId);
+
+  if (visit.syncStatus === "synced") {
+    await localDb.pendingVisitDeletes.put({ id: visitId });
+    scheduleBackgroundSync();
+  }
 }
 
 // 1分放置の自動保存トリガー。呼び出し元でsetTimeoutと組み合わせる。

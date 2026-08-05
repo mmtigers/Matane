@@ -21,8 +21,8 @@ export function BottomNav() {
             <li key={item.href} className="flex-1">
               <Link
                 href={item.href}
-                className={`flex flex-col items-center gap-0.5 py-3 text-xs ${
-                  active ? "text-amber-400" : "text-neutral-500"
+                className={`flex flex-col items-center gap-0.5 py-3 text-xs focus:ring-2 focus:ring-amber-400 ${
+                  active ? "text-amber-400" : "text-neutral-400"
                 }`}
               >
                 <span className="text-lg leading-none">{item.icon}</span>

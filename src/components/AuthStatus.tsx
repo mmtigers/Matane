@@ -21,19 +21,26 @@ export function AuthStatus() {
 
   if (!session) {
     return (
-      <Link href="/login" className="text-xs text-amber-400 underline underline-offset-2">
+      <Link
+        href="/login"
+        className="text-xs text-amber-400 underline underline-offset-2 focus:ring-2 focus:ring-amber-400"
+      >
         ログインして他の端末と同期する
       </Link>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs text-neutral-500">
+    <div className="flex items-center gap-2 text-xs text-neutral-400">
       <span>{session.user.email}</span>
       {!!pendingCount && (
         <span className="text-amber-400">未同期{pendingCount}件</span>
       )}
-      <button type="button" onClick={handleLogout} className="underline underline-offset-2">
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="underline underline-offset-2 focus:ring-2 focus:ring-amber-400"
+      >
         ログアウト
       </button>
     </div>

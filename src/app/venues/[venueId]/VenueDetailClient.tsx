@@ -32,7 +32,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
   }
 
   if (!venue || !visits) {
-    return <main className="px-4 pt-8 text-sm text-neutral-500">読み込み中...</main>;
+    return <main className="px-4 pt-8 text-sm text-neutral-400">読み込み中...</main>;
   }
 
   return (
@@ -40,9 +40,9 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
       <header>
         <h1 className="text-lg font-bold">{venue.name || "店名未設定"}</h1>
         {venue.nearest_station && (
-          <p className="text-xs text-neutral-500">最寄り駅: {venue.nearest_station}</p>
+          <p className="text-xs text-neutral-400">最寄り駅: {venue.nearest_station}</p>
         )}
-        {venue.address && <p className="text-xs text-neutral-500">{venue.address}</p>}
+        {venue.address && <p className="text-xs text-neutral-400">{venue.address}</p>}
       </header>
 
       {latestCompleted && (
@@ -50,7 +50,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
           type="button"
           onClick={handleRepeatCheckIn}
           disabled={checkingIn}
-          className="rounded-full bg-amber-400 py-4 text-base font-semibold text-black disabled:opacity-60"
+          className="rounded-full bg-amber-400 py-4 text-base font-semibold text-black focus:ring-2 focus:ring-amber-200 disabled:opacity-60"
         >
           {checkingIn ? "登録中..." : "前回の設定でチェックイン"}
         </button>
@@ -59,7 +59,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-neutral-400">これまでの訪問</h2>
         {visits.length === 0 ? (
-          <p className="text-sm text-neutral-500">まだ訪問記録がありません。</p>
+          <p className="text-sm text-neutral-400">まだ訪問記録がありません。</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {visits.map((visit) => {
@@ -98,7 +98,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
                         ? `/visits/${visit.id}`
                         : `/visits/${visit.id}/register`
                     }
-                    className="block rounded-xl bg-neutral-900 p-4"
+                    className="block rounded-xl bg-neutral-900 p-4 focus:ring-2 focus:ring-amber-400"
                   >
                     {content}
                   </Link>

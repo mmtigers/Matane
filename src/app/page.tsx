@@ -35,6 +35,7 @@ export default function HomePage() {
   const [undoVisitId, setUndoVisitId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LocalVenue[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const router = useRouter();
 
   const incompleteVisits = useIncompleteVisits();
@@ -60,6 +61,7 @@ export default function HomePage() {
   }, [searchQuery]);
 
   async function handleInstantCheckIn() {
+    setErrorMessage(null);
     setCheckingIn(true);
     try {
       const location = await getCurrentLocation();
@@ -67,7 +69,7 @@ export default function HomePage() {
       setUndoVisitId(visitId);
     } catch (error) {
       console.error(error);
-      window.alert("位置情報を取得できませんでした。設定をご確認ください。");
+      setErrorMessage("位置情報を取得できませんでした。設定をご確認ください。");
     } finally {
       setCheckingIn(false);
     }
@@ -99,13 +101,17 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => setModeOverride(mode === "night" ? "day" : "night")}
-            className="text-xs text-neutral-500 underline underline-offset-2"
+            className="text-xs text-neutral-400 underline underline-offset-2 focus:ring-2 focus:ring-amber-400"
           >
             {mode === "night" ? "☀️ 日中モードに切替" : "🌙 夜間モードに切替"}
           </button>
         </div>
         <AuthStatus />
       </header>
+
+      {errorMessage && (
+        <p className="rounded-xl bg-red-950 px-4 py-3 text-sm text-red-300">{errorMessage}</p>
+      )}
 
       {mode === "night" ? (
         <section className="flex flex-col items-center gap-4 py-8">
@@ -129,17 +135,17 @@ export default function HomePage() {
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-semibold text-amber-400">⚠️ 昨日の盛り付け待ち</h2>
           {!incompleteVisits || incompleteVisits.length === 0 ? (
-            <p className="text-sm text-neutral-500">盛り付け待ちの訪問はありません。</p>
+            <p className="text-sm text-neutral-400">盛り付け待ちの訪問はありません。</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {incompleteVisits.map((visit) => (
                 <li key={visit.id}>
                   <Link
                     href={`/visits/${visit.id}/register`}
-                    className="flex items-center justify-between rounded-xl bg-neutral-900 px-4 py-3"
+                    className="flex items-center justify-between rounded-xl bg-neutral-900 px-4 py-3 focus:ring-2 focus:ring-amber-400"
                   >
                     <span>{visit.venue?.name || "店名未設定"}</span>
-                    <span className="text-xs text-neutral-500">
+                    <span className="text-xs text-neutral-400">
                       {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
                     </span>
                   </Link>
@@ -159,7 +165,8 @@ export default function HomePage() {
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="店名または駅名"
-          className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600"
+          maxLength={100}
+          className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
         />
         {searchQuery.trim() && (
           <ul className="flex flex-col gap-2">
@@ -169,11 +176,11 @@ export default function HomePage() {
                   type="button"
                   data-venue-id={venue.id}
                   onClick={() => goToRegisterForVenueId(venue.id)}
-                  className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-left"
+                  className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-left focus:ring-2 focus:ring-amber-400"
                 >
                   {venue.name}
                   {venue.nearest_station && (
-                    <span className="ml-2 text-xs text-neutral-500">
+                    <span className="ml-2 text-xs text-neutral-400">
                       {venue.nearest_station}
                     </span>
                   )}
@@ -184,7 +191,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => goToRegisterForNewName(searchQuery.trim())}
-                className="w-full rounded-xl border border-dashed border-neutral-700 px-4 py-3 text-left text-neutral-400"
+                className="w-full rounded-xl border border-dashed border-neutral-700 px-4 py-3 text-left text-neutral-400 focus:ring-2 focus:ring-amber-400"
               >
                 「{searchQuery.trim()}」で新規チェックイン
               </button>
@@ -197,13 +204,13 @@ export default function HomePage() {
         <section className="rounded-2xl bg-neutral-900 p-4">
           <h2 className="text-sm font-semibold text-amber-400">今日どこ行く？</h2>
           <p className="mt-2 text-base font-medium">{suggestion.venue.name}</p>
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-neutral-400">
             前回: {new Date(suggestion.visited_at).toLocaleDateString("ja-JP")}
             ・しばらく行っていません
           </p>
           <Link
             href={`/venues/${suggestion.venue.id}`}
-            className="mt-3 inline-block rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-black"
+            className="mt-3 inline-block rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-200"
           >
             店舗詳細を見る
           </Link>
@@ -216,7 +223,7 @@ export default function HomePage() {
           <button
             type="button"
             onClick={handleUndo}
-            className="text-sm font-semibold text-amber-400"
+            className="text-sm font-semibold text-amber-400 focus:ring-2 focus:ring-amber-400"
           >
             取り消す
           </button>

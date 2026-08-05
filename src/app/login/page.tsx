@@ -5,6 +5,18 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getSupabaseClient } from "@/lib/supabase/client";
 
+const COOLDOWN_SECONDS = 30;
+const LAST_SENT_KEY = "matane:lastOtpSentAt";
+
+// ページ再読み込みでもクールダウンが効くよう、送信時刻をlocalStorageに残して判定する
+// (コンポーネントのstateだけだと、遷移してすぐ戻れば連打できてしまうため)。
+function getRemainingCooldown(): number {
+  if (typeof window === "undefined") return 0;
+  const lastSent = Number(window.localStorage.getItem(LAST_SENT_KEY) ?? 0);
+  const elapsedSeconds = (Date.now() - lastSent) / 1000;
+  return Math.max(0, Math.ceil(COOLDOWN_SECONDS - elapsedSeconds));
+}
+
 export default function LoginPage() {
   const { session, loading } = useAuth();
   const router = useRouter();
@@ -12,6 +24,10 @@ export default function LoginPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // 初期値はlazy initializerで計算する(useEffect内でのsetStateは避ける)。
+  // SSR時点ではlocalStorageが無いため常に0を返し、直近に送信していた場合のみ
+  // hydration後の初回レンダーでクールダウン表示に切り替わる。
+  const [cooldown, setCooldown] = useState<number>(() => getRemainingCooldown());
 
   useEffect(() => {
     if (!loading && session) {
@@ -19,8 +35,16 @@ export default function LoginPage() {
     }
   }, [loading, session, router]);
 
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (cooldown > 0) return;
+
     setSending(true);
     setErrorMessage(null);
     try {
@@ -30,6 +54,8 @@ export default function LoginPage() {
         options: { emailRedirectTo: window.location.origin },
       });
       if (error) throw error;
+      window.localStorage.setItem(LAST_SENT_KEY, String(Date.now()));
+      setCooldown(COOLDOWN_SECONDS);
       setSent(true);
     } catch (error) {
       setErrorMessage(
@@ -40,21 +66,35 @@ export default function LoginPage() {
     }
   }
 
+  const submitLabel = sending
+    ? "送信中..."
+    : cooldown > 0
+      ? `${cooldown}秒後に再送信できます`
+      : "ログインリンクを送る";
+
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-12">
       <header>
         <h1 className="text-lg font-bold">ログイン</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-neutral-400">
           メールアドレス宛にログイン用のリンクを送ります。パスワードは不要です。
         </p>
       </header>
 
       {sent ? (
-        <div className="rounded-xl bg-neutral-900 p-4 text-sm text-neutral-200">
+        <div className="flex flex-col gap-3 rounded-xl bg-neutral-900 p-4 text-sm text-neutral-200">
           <p>
             <span className="font-semibold text-amber-400">{email}</span>{" "}
             にログインリンクを送信しました。メール内のリンクを開いてください。
           </p>
+          <button
+            type="button"
+            onClick={() => setSent(false)}
+            disabled={cooldown > 0}
+            className="self-start text-xs text-amber-400 underline underline-offset-2 focus:ring-2 focus:ring-amber-400 disabled:text-neutral-500 disabled:no-underline"
+          >
+            別のメールアドレスで送り直す{cooldown > 0 && `（${cooldown}秒後）`}
+          </button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -64,20 +104,20 @@ export default function LoginPage() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@example.com"
-            className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600"
+            className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
           />
           {errorMessage && <p className="text-sm text-red-400">{errorMessage}</p>}
           <button
             type="submit"
-            disabled={sending}
-            className="rounded-full bg-amber-400 py-4 text-base font-semibold text-black disabled:opacity-60"
+            disabled={sending || cooldown > 0}
+            className="rounded-full bg-amber-400 py-4 text-base font-semibold text-black focus:ring-2 focus:ring-amber-200 disabled:opacity-60"
           >
-            {sending ? "送信中..." : "ログインリンクを送る"}
+            {submitLabel}
           </button>
         </form>
       )}
 
-      <p className="text-xs text-neutral-500">
+      <p className="text-xs text-neutral-400">
         ログインしなくてもこの端末での記録・閲覧は可能です。ログインすると他の端末ともデータが同期されます。
       </p>
     </main>

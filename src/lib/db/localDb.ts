@@ -6,11 +6,19 @@ export type SyncStatus = "pending" | "synced";
 export type LocalVenue = Venue & { syncStatus: SyncStatus };
 export type LocalVisit = Visit & { syncStatus: SyncStatus };
 
+// 既にSupabaseへ同期済み(syncStatus: "synced")のVisitを削除する際、その場で
+// リモート削除を試みるのではなく一旦ここに積み、sync.tsの通常サイクルで
+// まとめて処理する(オフライン中の削除も再試行できるようにするため)。
+export interface PendingVisitDelete {
+  id: string;
+}
+
 // GPS取得直後にオフラインでも仮保存できるよう、Supabaseと同じ形のレコードを
 // IndexedDBにミラーリングし、通信回復時にsyncStatus: "pending"のものだけを送る。
 class MataneDB extends Dexie {
   venues!: Table<LocalVenue, string>;
   visits!: Table<LocalVisit, string>;
+  pendingVisitDeletes!: Table<PendingVisitDelete, string>;
 
   constructor() {
     super("matane-db");
@@ -19,6 +27,13 @@ class MataneDB extends Dexie {
     this.version(1).stores({
       venues: "id, place_id, syncStatus",
       visits: "id, venue_id, visited_at, syncStatus",
+    });
+    // v2: オフライン削除の再試行キューを追加。既存ストアの形は変えないため
+    // Dexieが自動でテーブル追加のみのマイグレーションを行う。
+    this.version(2).stores({
+      venues: "id, place_id, syncStatus",
+      visits: "id, venue_id, visited_at, syncStatus",
+      pendingVisitDeletes: "id",
     });
   }
 }
