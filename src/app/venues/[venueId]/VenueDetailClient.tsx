@@ -62,37 +62,49 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
           <p className="text-sm text-neutral-500">まだ訪問記録がありません。</p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {visits.map((visit) => (
-              <li key={visit.id} className="rounded-xl bg-neutral-900 p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
-                  </span>
-                  {!visit.is_completed && (
-                    <Link
-                      href={`/visits/${visit.id}/register`}
-                      className="text-xs text-amber-400"
-                    >
-                      盛り付けする
-                    </Link>
+            {visits.map((visit) => {
+              const content = (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
+                    </span>
+                    {!visit.is_completed && (
+                      <span className="text-xs text-amber-400">盛り付け待ち</span>
+                    )}
+                  </div>
+                  {visit.best_photo && (
+                    // eslint-disable-next-line @next/next/no-img-element -- ローカルdata URLサムネイル
+                    <img
+                      src={visit.best_photo}
+                      alt=""
+                      className="mt-2 h-40 w-full rounded-lg object-cover"
+                    />
                   )}
-                </div>
-                {visit.best_photo && (
-                  // eslint-disable-next-line @next/next/no-img-element -- ローカルdata URLサムネイル
-                  <img
-                    src={visit.best_photo}
-                    alt=""
-                    className="mt-2 h-40 w-full rounded-lg object-cover"
-                  />
-                )}
-                {(visit.who.length > 0 || visit.alcohol_tags.length > 0) && (
-                  <p className="mt-2 text-xs text-neutral-400">
-                    {[...visit.who, ...visit.alcohol_tags].join(" / ")}
-                  </p>
-                )}
-                {visit.memo && <p className="mt-2 text-sm text-neutral-300">{visit.memo}</p>}
-              </li>
-            ))}
+                  {(visit.who.length > 0 || visit.alcohol_tags.length > 0) && (
+                    <p className="mt-2 text-xs text-neutral-400">
+                      {[...visit.who, ...visit.alcohol_tags].join(" / ")}
+                    </p>
+                  )}
+                  {visit.memo && <p className="mt-2 text-sm text-neutral-300">{visit.memo}</p>}
+                </>
+              );
+
+              return (
+                <li key={visit.id}>
+                  <Link
+                    href={
+                      visit.is_completed
+                        ? `/visits/${visit.id}`
+                        : `/visits/${visit.id}/register`
+                    }
+                    className="block rounded-xl bg-neutral-900 p-4"
+                  >
+                    {content}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

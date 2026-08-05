@@ -11,7 +11,7 @@ import type { AlcoholTag, Budget, Quietness, Revisit, Who } from "@/types/models
 const WHO_OPTIONS: Who[] = ["1人", "家族", "友人", "仕事/上司"];
 const REVISIT_OPTIONS: Revisit[] = ["絶対行く", "機会あり", "1回でいい"];
 const BUDGET_OPTIONS: Budget[] = ["〜3k", "〜5k", "〜10k", "10k〜"];
-const ALCOHOL_OPTIONS: AlcoholTag[] = ["日本酒", "ハイボール", "ビール", "その他"];
+const ALCOHOL_OPTIONS: AlcoholTag[] = ["ビール", "ハイボール", "日本酒", "ワイン"];
 const QUIETNESS_OPTIONS: Quietness[] = ["静か", "普通", "ガヤガヤ"];
 
 export function RegisterVisitClient({ visitId }: { visitId: string }) {

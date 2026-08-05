@@ -1,7 +1,7 @@
 export type Who = "1人" | "家族" | "友人" | "仕事/上司";
 export type Revisit = "絶対行く" | "機会あり" | "1回でいい";
 export type Budget = "〜3k" | "〜5k" | "〜10k" | "10k〜";
-export type AlcoholTag = "日本酒" | "ハイボール" | "ビール" | "その他";
+export type AlcoholTag = "ビール" | "ハイボール" | "日本酒" | "ワイン";
 export type Quietness = "静か" | "普通" | "ガヤガヤ";
 
 export interface LatLng {

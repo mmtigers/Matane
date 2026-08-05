@@ -9,10 +9,10 @@ import { formatMonthLabel, monthKey } from "@/lib/time";
 import type { AlcoholTag } from "@/types/models";
 
 const ALCOHOL_FILTERS: { icon: string; tag: AlcoholTag }[] = [
-  { icon: "🍶", tag: "日本酒" },
-  { icon: "🥃", tag: "ハイボール" },
   { icon: "🍺", tag: "ビール" },
-  { icon: "🍷", tag: "その他" },
+  { icon: "🥃", tag: "ハイボール" },
+  { icon: "🍶", tag: "日本酒" },
+  { icon: "🍷", tag: "ワイン" },
 ];
 
 interface MonthGroup {
@@ -102,8 +102,8 @@ export default function TimelinePage() {
                     >
                       <Link
                         href={
-                          visit.venue
-                            ? `/venues/${visit.venue.id}`
+                          visit.is_completed
+                            ? `/visits/${visit.id}`
                             : `/visits/${visit.id}/register`
                         }
                         className="flex flex-1 items-center gap-3 min-w-0"
