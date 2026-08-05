@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { estimateAverageBudget } from "@/lib/budget";
+import { deleteVisit } from "@/lib/db/checkin";
 import { useTimelineVisits, type VisitWithVenue } from "@/lib/db/queries";
 import { formatMonthLabel, monthKey } from "@/lib/time";
 import type { AlcoholTag } from "@/types/models";
@@ -49,6 +50,12 @@ export default function TimelinePage() {
 
   const monthGroups = useMemo(() => groupByMonth(filtered), [filtered]);
 
+  async function handleDelete(visit: VisitWithVenue) {
+    const label = visit.venue?.name || "この記録";
+    if (!window.confirm(`${label}を削除しますか？この操作は取り消せません。`)) return;
+    await deleteVisit(visit.id);
+  }
+
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
       <header className="flex items-center justify-between">
@@ -89,14 +96,17 @@ export default function TimelinePage() {
                 </h2>
                 <ul className="flex flex-col gap-2">
                   {group.visits.map((visit) => (
-                    <li key={visit.id}>
+                    <li
+                      key={visit.id}
+                      className="flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-3"
+                    >
                       <Link
                         href={
                           visit.venue
                             ? `/venues/${visit.venue.id}`
                             : `/visits/${visit.id}/register`
                         }
-                        className="flex items-center gap-3 rounded-xl bg-neutral-900 px-4 py-3"
+                        className="flex flex-1 items-center gap-3 min-w-0"
                       >
                         <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-lg bg-neutral-800 text-lg">
                           {visit.best_photo ? (
@@ -110,7 +120,7 @@ export default function TimelinePage() {
                             "🍶"
                           )}
                         </div>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium">
                             {visit.venue?.name || "店名未設定"}
                             {!visit.is_completed && (
@@ -124,6 +134,14 @@ export default function TimelinePage() {
                           </p>
                         </div>
                       </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(visit)}
+                        aria-label="削除"
+                        className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-neutral-500 active:bg-neutral-800"
+                      >
+                        🗑
+                      </button>
                     </li>
                   ))}
                 </ul>

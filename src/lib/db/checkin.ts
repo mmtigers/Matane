@@ -1,7 +1,8 @@
+import { getSupabaseClient } from "@/lib/supabase/client";
+import type { LatLng } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 import { searchVenuesLocal } from "./queries";
 import { syncPendingChanges } from "./sync";
-import type { LatLng } from "@/types/models";
 
 type VisitChoiceFields = Pick<
   LocalVisit,
@@ -130,6 +131,24 @@ export async function duplicateVisit(previous: LocalVisit) {
   await localDb.visits.add(visit);
   scheduleBackgroundSync();
   return visitId;
+}
+
+// タイムラインからの削除(誤登録の取り消し用)。既にSupabaseへ同期済みの場合はクラウド側も
+// あわせて削除を試みるが、失敗してもローカルの記録は削除する(オフライン中の削除を優先する)。
+export async function deleteVisit(visitId: string) {
+  const visit = await localDb.visits.get(visitId);
+  if (!visit) return;
+
+  if (visit.syncStatus === "synced") {
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.from("visits").delete().eq("id", visitId);
+    } catch (error) {
+      console.warn("Supabase上のVisit削除に失敗しました(ローカルからは削除します):", error);
+    }
+  }
+
+  await localDb.visits.delete(visitId);
 }
 
 // 1分放置の自動保存トリガー。呼び出し元でsetTimeoutと組み合わせる。

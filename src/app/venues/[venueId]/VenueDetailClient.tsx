@@ -45,27 +45,6 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
         {venue.address && <p className="text-xs text-neutral-500">{venue.address}</p>}
       </header>
 
-      <section className="flex flex-col gap-2 rounded-2xl bg-neutral-900 p-4">
-        <h2 className="text-sm font-semibold text-amber-400">🚃 終電・帰宅アラート</h2>
-        <ul className="flex flex-col gap-1">
-          {commuteDestinations.map((destination) => (
-            <li
-              key={destination.id}
-              className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
-                destination.id === priorityId
-                  ? "bg-amber-400/10 text-amber-300"
-                  : "text-neutral-300"
-              }`}
-            >
-              <span>{destination.label}</span>
-              <span className="font-mono">
-                {getLastTrainTime(destination, venue.nearest_station)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
       {latestCompleted && (
         <button
           type="button"
@@ -116,6 +95,27 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-2xl bg-neutral-900 p-4">
+        <h2 className="text-sm font-semibold text-amber-400">🚃 終電・帰宅アラート</h2>
+        <ul className="flex flex-col gap-1">
+          {commuteDestinations.map((destination) => (
+            <li
+              key={destination.id}
+              className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+                destination.id === priorityId
+                  ? "bg-amber-400/10 text-amber-300"
+                  : "text-neutral-300"
+              }`}
+            >
+              <span>{destination.label}</span>
+              <span className="font-mono">
+                {getLastTrainTime(destination, venue.nearest_station)}
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
     </main>
   );
