@@ -13,6 +13,7 @@ const REVISIT_OPTIONS: Revisit[] = ["絶対行く", "機会あり", "1回でい�
 const BUDGET_OPTIONS: Budget[] = ["〜3k", "〜5k", "〜10k", "10k〜"];
 const ALCOHOL_OPTIONS: AlcoholTag[] = ["ビール", "ハイボール", "日本酒", "ワイン"];
 const QUIETNESS_OPTIONS: Quietness[] = ["静か", "普通", "ガヤガヤ"];
+const MAX_UPLOAD_BYTES = 20_000_000;
 
 export function RegisterVisitClient({ visitId }: { visitId: string }) {
   const visit = useVisitWithVenue(visitId);
@@ -47,6 +48,14 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    // 圧縮前の生ファイルに対する安全弁。モバイルカメラの超高解像度写真をそのまま
+    // デコードしようとしてタブがクラッシュ/フリーズするのを防ぐ。
+    if (file.size > MAX_UPLOAD_BYTES) {
+      window.alert("ファイルサイズが大きすぎます(20MBまで)。別の写真を選んでください");
+      event.target.value = "";
+      return;
+    }
 
     setCompressing(true);
     try {

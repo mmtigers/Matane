@@ -167,6 +167,7 @@ export default function HomePage() {
               <li key={venue.id}>
                 <button
                   type="button"
+                  data-venue-id={venue.id}
                   onClick={() => goToRegisterForVenueId(venue.id)}
                   className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-left"
                 >

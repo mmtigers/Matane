@@ -80,6 +80,18 @@ export function useSuggestedVenue() {
   }, []);
 }
 
+// 「最後の同期からn件未送信」をホーム画面に出すためのカウント。sync失敗が
+// 完全にサイレントにならないよう、ユーザー自身がここで気づけるようにする。
+export function usePendingSyncCount() {
+  return useLiveQuery(async () => {
+    const [pendingVenues, pendingVisits] = await Promise.all([
+      localDb.venues.where("syncStatus").equals("pending").count(),
+      localDb.visits.where("syncStatus").equals("pending").count(),
+    ]);
+    return pendingVenues + pendingVisits;
+  }, []);
+}
+
 export async function searchVenuesLocal(query: string): Promise<LocalVenue[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];

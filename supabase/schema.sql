@@ -10,6 +10,7 @@ create table if not exists venues (
   location geography(point, 4326),
   address text,
   nearest_station text,
+  created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
 
@@ -39,7 +40,10 @@ create index if not exists idx_visits_is_completed on visits(is_completed) where
 alter table venues enable row level security;
 alter table visits enable row level security;
 
--- Venues はプレイス情報のマスタなので全ユーザー参照可、書き込みは認証済みユーザーのみ
+-- Venues はプレイス情報のマスタなので全ユーザー参照可。書き込みは認証済みユーザーのみだが、
+-- created_by を必須にして「誰が作成したか」を追跡できるようにする(全ユーザーが無制限に
+-- 書き込める状態だと、公開されたマジックリンク登録経路から共有venuesテーブルを
+-- 汚染される懸念があるため)。
 create policy "venues are readable by authenticated users"
   on venues for select
   to authenticated
@@ -48,7 +52,13 @@ create policy "venues are readable by authenticated users"
 create policy "venues are insertable by authenticated users"
   on venues for insert
   to authenticated
-  with check (true);
+  with check (created_by = auth.uid());
+
+create policy "venues are updatable by their creator"
+  on venues for update
+  to authenticated
+  using (created_by = auth.uid())
+  with check (created_by = auth.uid());
 
 -- Visits は本人のデータのみ読み書き可能
 create policy "visits are readable by owner"

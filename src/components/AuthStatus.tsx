@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { usePendingSyncCount } from "@/lib/db/queries";
 import { getSupabaseClient } from "@/lib/supabase/client";
 
 export function AuthStatus() {
   const { session, loading } = useAuth();
+  const pendingCount = usePendingSyncCount();
 
   async function handleLogout() {
     try {
@@ -28,6 +30,9 @@ export function AuthStatus() {
   return (
     <div className="flex items-center gap-2 text-xs text-neutral-500">
       <span>{session.user.email}</span>
+      {!!pendingCount && (
+        <span className="text-amber-400">未同期{pendingCount}件</span>
+      )}
       <button type="button" onClick={handleLogout} className="underline underline-offset-2">
         ログアウト
       </button>
