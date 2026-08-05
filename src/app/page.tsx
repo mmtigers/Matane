@@ -252,7 +252,7 @@ export default function HomePage() {
             )}
 
             {!loadingPlaces && placeCandidates.length > 0 && (
-              <ul className="mt-3 flex flex-col gap-1.5">
+              <ul className="mt-3 flex max-h-60 flex-col gap-1.5 overflow-y-auto">
                 {placeCandidates.map((place) => (
                   <li key={place.placeId}>
                     <button
@@ -275,7 +275,6 @@ export default function HomePage() {
             )}
 
             <input
-              autoFocus
               value={instantNameInput}
               onChange={(event) => {
                 setInstantNameInput(event.target.value);

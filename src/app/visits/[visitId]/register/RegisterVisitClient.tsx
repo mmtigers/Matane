@@ -186,7 +186,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
           )}
 
           {!loadingPlaces && placeCandidates.length > 0 && (
-            <ul className="flex flex-col gap-1.5">
+            <ul className="flex max-h-60 flex-col gap-1.5 overflow-y-auto">
               {placeCandidates.map((place) => (
                 <li key={place.placeId}>
                   <button
