@@ -10,6 +10,7 @@ test("瞬録チェックイン後、5秒以内ならアンドゥで取り消せ�
   await page.waitForSelector("#venue-search");
 
   await page.getByText("今ココを瞬録").click();
+  await page.getByRole("button", { name: "登録する" }).click();
   await expect(page.getByText("チェックインしました")).toBeVisible();
 
   await page.getByRole("button", { name: "取り消す" }).click();

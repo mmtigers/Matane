@@ -15,12 +15,16 @@ import type { LocalVenue } from "@/lib/db/localDb";
 import { searchVenuesLocal, useIncompleteVisits, useSuggestedVenue } from "@/lib/db/queries";
 import { getCurrentLocation } from "@/lib/geo";
 
+const VENUE_NAME_MAX_LENGTH = 100;
+
 export default function HomePage() {
   const [checkingIn, setCheckingIn] = useState(false);
   const [undoVisitId, setUndoVisitId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LocalVenue[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [instantNameInput, setInstantNameInput] = useState("");
   const router = useRouter();
 
   const incompleteVisits = useIncompleteVisits();
@@ -45,12 +49,18 @@ export default function HomePage() {
     };
   }, [searchQuery]);
 
-  async function handleInstantCheckIn() {
+  function openNamePrompt() {
+    setInstantNameInput("");
+    setShowNamePrompt(true);
+  }
+
+  async function handleInstantCheckIn(name: string) {
+    setShowNamePrompt(false);
     setErrorMessage(null);
     setCheckingIn(true);
     try {
       const location = await getCurrentLocation();
-      const visitId = await createInstantCheckIn(location);
+      const visitId = await createInstantCheckIn(location, name);
       setUndoVisitId(visitId);
     } catch (error) {
       console.error(error);
@@ -90,7 +100,7 @@ export default function HomePage() {
       <section className="flex flex-col items-center gap-4 py-8">
         <button
           type="button"
-          onClick={handleInstantCheckIn}
+          onClick={openNamePrompt}
           disabled={checkingIn}
           className="flex h-48 w-48 flex-col items-center justify-center gap-2 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
         >
@@ -185,6 +195,50 @@ export default function HomePage() {
             店舗詳細を見る
           </Link>
         </section>
+      )}
+
+      {showNamePrompt && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="名前わかる？"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+          onClick={() => setShowNamePrompt(false)}
+        >
+          <div
+            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-900 p-5 sm:mb-0"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm text-neutral-100">名前わかる？</p>
+            <input
+              autoFocus
+              value={instantNameInput}
+              onChange={(event) => setInstantNameInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") handleInstantCheckIn(instantNameInput);
+              }}
+              placeholder="わからなければ空欄でOK"
+              maxLength={VENUE_NAME_MAX_LENGTH}
+              className="mt-4 w-full rounded-xl bg-neutral-800 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
+            />
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowNamePrompt(false)}
+                className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInstantCheckIn(instantNameInput)}
+                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400"
+              >
+                登録する
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {undoVisitId && (

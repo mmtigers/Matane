@@ -29,6 +29,7 @@ test("同名の店舗が複数あっても検索結果のクリック先と紐�
   await page.goto("/");
   await page.waitForSelector("#venue-search");
   await page.getByText("今ココを瞬録").click();
+  await page.getByRole("button", { name: "登録する" }).click();
   await expect(page.getByText("チェックインしました")).toBeVisible();
   await page.waitForTimeout(5500);
 
