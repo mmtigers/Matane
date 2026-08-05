@@ -14,6 +14,8 @@ import {
 import type { LocalVenue } from "@/lib/db/localDb";
 import { searchVenuesLocal, useIncompleteVisits, useSuggestedVenue } from "@/lib/db/queries";
 import { getCurrentLocation } from "@/lib/geo";
+import type { LatLng } from "@/types/models";
+import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
 
 const VENUE_NAME_MAX_LENGTH = 100;
 
@@ -25,6 +27,10 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [instantNameInput, setInstantNameInput] = useState("");
+  const [pendingLocation, setPendingLocation] = useState<LatLng | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceCandidate | null>(null);
+  const [placeCandidates, setPlaceCandidates] = useState<PlaceCandidate[]>([]);
+  const [loadingPlaces, setLoadingPlaces] = useState(false);
   const router = useRouter();
 
   const incompleteVisits = useIncompleteVisits();
@@ -49,24 +55,54 @@ export default function HomePage() {
     };
   }, [searchQuery]);
 
-  function openNamePrompt() {
-    setInstantNameInput("");
-    setShowNamePrompt(true);
-  }
-
-  async function handleInstantCheckIn(name: string) {
-    setShowNamePrompt(false);
+  async function openNamePrompt() {
     setErrorMessage(null);
     setCheckingIn(true);
     try {
       const location = await getCurrentLocation();
-      const visitId = await createInstantCheckIn(location, name);
-      setUndoVisitId(visitId);
+      setPendingLocation(location);
+      setInstantNameInput("");
+      setSelectedPlace(null);
+      setPlaceCandidates([]);
+      setShowNamePrompt(true);
+
+      setLoadingPlaces(true);
+      searchNearbyVenues(location)
+        .then(setPlaceCandidates)
+        .finally(() => setLoadingPlaces(false));
     } catch (error) {
       console.error(error);
       setErrorMessage("位置情報を取得できませんでした。設定をご確認ください。");
     } finally {
       setCheckingIn(false);
+    }
+  }
+
+  function handleSelectPlace(place: PlaceCandidate) {
+    setSelectedPlace(place);
+    setInstantNameInput(place.name);
+  }
+
+  async function handleInstantCheckIn(name: string) {
+    if (!pendingLocation) return;
+    setShowNamePrompt(false);
+    setErrorMessage(null);
+    setCheckingIn(true);
+    try {
+      const trimmed = name.trim();
+      const place = selectedPlace?.name === trimmed ? selectedPlace : undefined;
+      const visitId = await createInstantCheckIn(
+        pendingLocation,
+        name,
+        place ? { placeId: place.placeId, address: place.address } : undefined
+      );
+      setUndoVisitId(visitId);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("チェックインに失敗しました。");
+    } finally {
+      setCheckingIn(false);
+      setPendingLocation(null);
     }
   }
 
@@ -210,16 +246,47 @@ export default function HomePage() {
             onClick={(event) => event.stopPropagation()}
           >
             <p className="text-sm text-neutral-100">名前わかる？</p>
+
+            {loadingPlaces && (
+              <p className="mt-3 text-xs text-neutral-400">近くの店舗を検索中...</p>
+            )}
+
+            {!loadingPlaces && placeCandidates.length > 0 && (
+              <ul className="mt-3 flex flex-col gap-1.5">
+                {placeCandidates.map((place) => (
+                  <li key={place.placeId}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPlace(place)}
+                      className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
+                        selectedPlace?.placeId === place.placeId
+                          ? "bg-amber-400/20 text-amber-300"
+                          : "bg-neutral-800 text-neutral-200"
+                      }`}
+                    >
+                      {place.name}
+                      {place.address && (
+                        <span className="ml-2 text-xs text-neutral-400">{place.address}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             <input
               autoFocus
               value={instantNameInput}
-              onChange={(event) => setInstantNameInput(event.target.value)}
+              onChange={(event) => {
+                setInstantNameInput(event.target.value);
+                setSelectedPlace(null);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") handleInstantCheckIn(instantNameInput);
               }}
-              placeholder="わからなければ空欄でOK"
+              placeholder="候補にない場合は入力(わからなければ空欄でOK)"
               maxLength={VENUE_NAME_MAX_LENGTH}
-              className="mt-4 w-full rounded-xl bg-neutral-800 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
+              className="mt-3 w-full rounded-xl bg-neutral-800 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
             />
             <div className="mt-4 flex gap-3">
               <button

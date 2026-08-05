@@ -24,16 +24,21 @@ function emptyVisitFields(): VisitChoiceFields & { ai_tags: string[] } {
 }
 
 // ホーム画面の「📍今ココを瞬録」用。タップ時に店名を聞き、わかれば即確定する。
+// 周辺店舗候補(Google Places)から選んだ場合はplaceId/addressも合わせて確定させる。
 // わからず空欄の場合はVenueを位置情報のみのプレースホルダーとして作成し、
 // 登録(二次登録)時に確定させる。
-export async function createInstantCheckIn(location: LatLng, name = "") {
+export async function createInstantCheckIn(
+  location: LatLng,
+  name = "",
+  place?: { placeId: string; address: string | null }
+) {
   const venueId = crypto.randomUUID();
   const venue: LocalVenue = {
     id: venueId,
-    place_id: null,
+    place_id: place?.placeId ?? null,
     name: name.trim().slice(0, VENUE_NAME_MAX_LENGTH),
     location,
-    address: null,
+    address: place?.address ?? null,
     nearest_station: null,
     syncStatus: "pending",
   };
