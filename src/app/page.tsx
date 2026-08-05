@@ -117,7 +117,7 @@ export default function HomePage() {
 
       {incompleteVisits && incompleteVisits.length > 0 && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-amber-400">⚠️ 盛り付け待ち</h2>
+          <h2 className="text-sm font-semibold text-amber-400">⚠️ 登録待ち</h2>
           <ul className="flex flex-col gap-2">
             {incompleteVisits.map((visit) => (
               <li key={visit.id}>

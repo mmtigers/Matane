@@ -42,12 +42,12 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
   if (!visit.is_completed) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 px-4 pt-8">
-        <p className="text-sm text-neutral-400">この記録はまだ盛り付け前です。</p>
+        <p className="text-sm text-neutral-400">この記録はまだ登録前です。</p>
         <Link
           href={`/visits/${visit.id}/register`}
           className="rounded-full bg-amber-400 py-4 text-center text-base font-semibold text-black"
         >
-          盛り付けする
+          登録する
         </Link>
       </main>
     );

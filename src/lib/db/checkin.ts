@@ -25,7 +25,7 @@ function emptyVisitFields(): VisitChoiceFields & { ai_tags: string[] } {
 
 // ホーム画面の「📍今ココを瞬録」用。タップ時に店名を聞き、わかれば即確定する。
 // わからず空欄の場合はVenueを位置情報のみのプレースホルダーとして作成し、
-// 盛り付け(二次登録)時に確定させる。
+// 登録(二次登録)時に確定させる。
 export async function createInstantCheckIn(location: LatLng, name = "") {
   const venueId = crypto.randomUUID();
   const venue: LocalVenue = {
@@ -99,13 +99,13 @@ export async function undoCheckIn(visitId: string) {
   await localDb.venues.delete(visit.venue_id);
 }
 
-// GPSのみで店名が未確定の瞬録に、盛り付け画面から店名を確定させる。
+// GPSのみで店名が未確定の瞬録に、登録画面から店名を確定させる。
 export async function setVenueName(venueId: string, name: string) {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
   await localDb.venues.update(venueId, { name: trimmed, syncStatus: "pending" });
 }
 
-// 盛り付け(二次登録)画面の保存。選択項目を反映し、is_completedをtrueにする。
+// 登録(二次登録)画面の保存。選択項目を反映し、is_completedをtrueにする。
 export async function completeVisitRegistration(
   visitId: string,
   patch: Partial<VisitChoiceFields>

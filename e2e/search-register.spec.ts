@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("店名検索→チェックイン→盛り付け→タイムライン反映まで一連の流れが動く", async ({ page }) => {
+test("店名検索→チェックイン→登録→タイムライン反映まで一連の流れが動く", async ({ page }) => {
   await page.goto("/");
 
   await page.fill("#venue-search", "E2Eテスト居酒屋");

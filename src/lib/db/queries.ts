@@ -10,7 +10,7 @@ async function attachVenue(visit: LocalVisit): Promise<VisitWithVenue> {
   return { ...visit, venue };
 }
 
-// ホーム画面の「盛り付け待ち」リスト用。
+// ホーム画面の「登録待ち」リスト用。
 export function useIncompleteVisits() {
   return useLiveQuery(async () => {
     const visits = await localDb.visits.toArray();

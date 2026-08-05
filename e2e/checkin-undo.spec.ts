@@ -16,6 +16,6 @@ test("瞬録チェックイン後、5秒以内ならアンドゥで取り消せ�
   await page.getByRole("button", { name: "取り消す" }).click();
   await expect(page.getByText("チェックインしました")).not.toBeVisible();
 
-  // 取り消した記録は「盛り付け待ち」にも出てこない
-  await expect(page.getByText("⚠️ 盛り付け待ち")).not.toBeVisible();
+  // 取り消した記録は「登録待ち」にも出てこない
+  await expect(page.getByText("⚠️ 登録待ち")).not.toBeVisible();
 });

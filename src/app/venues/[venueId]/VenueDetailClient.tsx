@@ -70,7 +70,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
                       {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
                     </span>
                     {!visit.is_completed && (
-                      <span className="text-xs text-amber-400">盛り付け待ち</span>
+                      <span className="text-xs text-amber-400">登録待ち</span>
                     )}
                   </div>
                   {visit.best_photo && (

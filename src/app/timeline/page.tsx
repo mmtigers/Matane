@@ -127,7 +127,7 @@ export default function TimelinePage() {
                           <p className="text-sm font-medium">
                             {visit.venue?.name || "店名未設定"}
                             {!visit.is_completed && (
-                              <span className="ml-2 text-xs text-amber-400">盛り付け待ち</span>
+                              <span className="ml-2 text-xs text-amber-400">登録待ち</span>
                             )}
                           </p>
                           <p className="text-xs text-neutral-400">
