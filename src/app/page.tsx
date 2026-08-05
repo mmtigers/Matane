@@ -121,9 +121,9 @@ export default function HomePage() {
         </section>
       ) : (
         <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-amber-400">⚠️ 昨日の肉付け待ち</h2>
+          <h2 className="text-sm font-semibold text-amber-400">⚠️ 昨日の盛り付け待ち</h2>
           {!incompleteVisits || incompleteVisits.length === 0 ? (
-            <p className="text-sm text-neutral-500">肉付け待ちの訪問はありません。</p>
+            <p className="text-sm text-neutral-500">盛り付け待ちの訪問はありません。</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {incompleteVisits.map((visit) => (

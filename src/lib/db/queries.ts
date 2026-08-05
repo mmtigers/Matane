@@ -10,7 +10,7 @@ async function attachVenue(visit: LocalVisit): Promise<VisitWithVenue> {
   return { ...visit, venue };
 }
 
-// 日中モードの「昨日の肉付け待ち」リスト用。
+// 日中モードの「昨日の盛り付け待ち」リスト用。
 export function useIncompleteVisits() {
   return useLiveQuery(async () => {
     const visits = await localDb.visits.toArray();

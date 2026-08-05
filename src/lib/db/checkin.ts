@@ -22,7 +22,7 @@ function emptyVisitFields(): VisitChoiceFields & { ai_tags: string[] } {
 }
 
 // ホーム画面(夜間モード)の「📍今ココを瞬録」用。店名はこの時点では未確定のため
-// Venueは位置情報のみでプレースホルダー生成し、肉付け(二次登録)時に確定させる。
+// Venueは位置情報のみでプレースホルダー生成し、盛り付け(二次登録)時に確定させる。
 export async function createInstantCheckIn(location: LatLng) {
   const venueId = crypto.randomUUID();
   const venue: LocalVenue = {
@@ -91,12 +91,12 @@ export async function undoCheckIn(visitId: string) {
   await localDb.venues.delete(visit.venue_id);
 }
 
-// GPSのみで店名が未確定の瞬録に、肉付け画面から店名を確定させる。
+// GPSのみで店名が未確定の瞬録に、盛り付け画面から店名を確定させる。
 export async function setVenueName(venueId: string, name: string) {
   await localDb.venues.update(venueId, { name: name.trim(), syncStatus: "pending" });
 }
 
-// 肉付け(二次登録)画面の保存。選択項目を反映し、is_completedをtrueにする。
+// 盛り付け(二次登録)画面の保存。選択項目を反映し、is_completedをtrueにする。
 export async function completeVisitRegistration(
   visitId: string,
   patch: Partial<VisitChoiceFields>

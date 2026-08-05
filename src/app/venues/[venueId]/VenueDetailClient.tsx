@@ -94,7 +94,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
                       href={`/visits/${visit.id}/register`}
                       className="text-xs text-amber-400"
                     >
-                      肉付けする
+                      盛り付けする
                     </Link>
                   )}
                 </div>

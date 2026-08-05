@@ -8,7 +8,7 @@ interface ChoiceChipsProps<T extends string> {
   multiple?: boolean;
 }
 
-// 肉付け画面のワンタップ入力用。single-select時はvalueは0または1要素の配列として扱う。
+// 盛り付け画面のワンタップ入力用。single-select時はvalueは0または1要素の配列として扱う。
 export function ChoiceChips<T extends string>({
   label,
   options,
