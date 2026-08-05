@@ -100,9 +100,18 @@ export async function undoCheckIn(visitId: string) {
 }
 
 // GPSのみで店名が未確定の瞬録に、盛り付け画面から店名を確定させる。
-export async function setVenueName(venueId: string, name: string) {
+// 周辺店舗候補(Google Places)から選んだ場合はplaceId/addressも合わせて確定させる。
+export async function setVenueName(
+  venueId: string,
+  name: string,
+  place?: { placeId: string; address: string | null }
+) {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
-  await localDb.venues.update(venueId, { name: trimmed, syncStatus: "pending" });
+  await localDb.venues.update(venueId, {
+    name: trimmed,
+    syncStatus: "pending",
+    ...(place ? { place_id: place.placeId, address: place.address } : {}),
+  });
 }
 
 // 盛り付け(二次登録)画面の保存。選択項目を反映し、is_completedをtrueにする。

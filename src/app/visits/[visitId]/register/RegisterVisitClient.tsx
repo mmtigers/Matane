@@ -18,6 +18,7 @@ import {
 } from "@/constants/choices";
 import { completeVisitRegistration, setVenueName } from "@/lib/db/checkin";
 import { useVisitWithVenue } from "@/lib/db/queries";
+import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
 
 const MAX_UPLOAD_BYTES = 20_000_000;
 const MEMO_MAX_LENGTH = 2000;
@@ -29,6 +30,10 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   const initialized = useRef(false);
 
   const [venueNameInput, setVenueNameInput] = useState("");
+  const [selectedPlace, setSelectedPlace] = useState<PlaceCandidate | null>(null);
+  const [placeCandidates, setPlaceCandidates] = useState<PlaceCandidate[]>([]);
+  const [loadingPlaces, setLoadingPlaces] = useState(false);
+  const [hasSearchedPlaces, setHasSearchedPlaces] = useState(false);
   const [who, setWho] = useState<Who[]>([]);
   const [revisit, setRevisit] = useState<Revisit[]>([]);
   const [budget, setBudget] = useState<Budget[]>([]);
@@ -53,6 +58,25 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
     setMemo(visit.memo ?? "");
     setPhotoDataUrl(visit.best_photo ?? null);
   }, [visit]);
+
+  // GPSのみ(瞬録)で店名未確定のVenueに対し、ボタン操作で周辺の飲食店候補を取得する
+  // (自動取得にするとAPI呼び出しコストが無駄にかかるため、ユーザー操作を起点にする)。
+  async function handleSearchNearbyPlaces() {
+    if (!visit?.venue?.location) return;
+    setLoadingPlaces(true);
+    try {
+      const results = await searchNearbyVenues(visit.venue.location);
+      setPlaceCandidates(results);
+      setHasSearchedPlaces(true);
+    } finally {
+      setLoadingPlaces(false);
+    }
+  }
+
+  function handleSelectPlace(place: PlaceCandidate) {
+    setSelectedPlace(place);
+    setVenueNameInput(place.name);
+  }
 
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -97,7 +121,12 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
     setSaving(true);
     try {
       if (visit.venue && trimmedName && trimmedName !== visit.venue.name) {
-        await setVenueName(visit.venue.id, trimmedName);
+        const place = selectedPlace?.name === trimmedName ? selectedPlace : undefined;
+        await setVenueName(
+          visit.venue.id,
+          trimmedName,
+          place ? { placeId: place.placeId, address: place.address } : undefined
+        );
       }
 
       await completeVisitRegistration(visitId, {
@@ -140,11 +169,53 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
           <label className="text-sm font-medium text-neutral-400" htmlFor="venue-name">
             店名（GPSのみのため入力してください）
           </label>
+
+          {visit.venue?.location && placeCandidates.length === 0 && (
+            <button
+              type="button"
+              onClick={handleSearchNearbyPlaces}
+              disabled={loadingPlaces}
+              className="self-start rounded-full bg-neutral-800 px-4 py-2 text-xs font-semibold text-amber-300 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+            >
+              {loadingPlaces ? "検索中..." : "📍 近くの店舗を候補から選ぶ"}
+            </button>
+          )}
+
+          {!loadingPlaces && hasSearchedPlaces && placeCandidates.length === 0 && (
+            <p className="text-xs text-neutral-400">近くに候補となる店舗が見つかりませんでした。</p>
+          )}
+
+          {!loadingPlaces && placeCandidates.length > 0 && (
+            <ul className="flex flex-col gap-1.5">
+              {placeCandidates.map((place) => (
+                <li key={place.placeId}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPlace(place)}
+                    className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
+                      selectedPlace?.placeId === place.placeId
+                        ? "bg-amber-400/20 text-amber-300"
+                        : "bg-neutral-900 text-neutral-200"
+                    }`}
+                  >
+                    {place.name}
+                    {place.address && (
+                      <span className="ml-2 text-xs text-neutral-400">{place.address}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
           <input
             id="venue-name"
             value={venueNameInput}
-            onChange={(event) => setVenueNameInput(event.target.value)}
-            placeholder="店名を入力"
+            onChange={(event) => {
+              setVenueNameInput(event.target.value);
+              setSelectedPlace(null);
+            }}
+            placeholder="候補にない場合は店名を入力"
             maxLength={VENUE_NAME_MAX_LENGTH}
             className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
           />
