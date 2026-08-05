@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { AuthStatus } from "@/components/AuthStatus";
 import {
   createCheckInByVenueName,
@@ -14,23 +14,8 @@ import {
 import type { LocalVenue } from "@/lib/db/localDb";
 import { searchVenuesLocal, useIncompleteVisits, useSuggestedVenue } from "@/lib/db/queries";
 import { getCurrentLocation } from "@/lib/geo";
-import { getCurrentMode, type HomeMode } from "@/lib/time";
-
-function subscribeNoop() {
-  return () => {};
-}
-
-// SSRはサーバーのタイムゾーンに依存するため実行しない。クライアントでの
-// hydration後に一度だけ実際の時間帯を確定させる(useSyncExternalStoreの標準パターン)。
-function getServerMode(): HomeMode | null {
-  return null;
-}
 
 export default function HomePage() {
-  const detectedMode = useSyncExternalStore(subscribeNoop, getCurrentMode, getServerMode);
-  const [modeOverride, setModeOverride] = useState<HomeMode | null>(null);
-  const mode = modeOverride ?? detectedMode;
-
   const [checkingIn, setCheckingIn] = useState(false);
   const [undoVisitId, setUndoVisitId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -91,21 +76,10 @@ export default function HomePage() {
     router.push(`/visits/${visitId}/register`);
   }
 
-  if (mode === null) return null;
-
   return (
     <main className="mx-auto flex max-w-md flex-col gap-8 px-4 pt-8">
       <header className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-bold">Matane</h1>
-          <button
-            type="button"
-            onClick={() => setModeOverride(mode === "night" ? "day" : "night")}
-            className="text-xs text-neutral-400 underline underline-offset-2 focus:ring-2 focus:ring-amber-400"
-          >
-            {mode === "night" ? "☀️ 日中モードに切替" : "🌙 夜間モードに切替"}
-          </button>
-        </div>
+        <h1 className="text-lg font-bold">Matane</h1>
         <AuthStatus />
       </header>
 
@@ -113,46 +87,42 @@ export default function HomePage() {
         <p className="rounded-xl bg-red-950 px-4 py-3 text-sm text-red-300">{errorMessage}</p>
       )}
 
-      {mode === "night" ? (
-        <section className="flex flex-col items-center gap-4 py-8">
-          <button
-            type="button"
-            onClick={handleInstantCheckIn}
-            disabled={checkingIn}
-            className="flex h-48 w-48 flex-col items-center justify-center gap-2 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
-          >
-            {checkingIn ? (
-              <span className="text-base font-semibold">登録中...</span>
-            ) : (
-              <>
-                <span className="text-4xl">📍</span>
-                <span className="text-base font-semibold">今ココを瞬録</span>
-              </>
-            )}
-          </button>
-        </section>
-      ) : (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-amber-400">⚠️ 昨日の盛り付け待ち</h2>
-          {!incompleteVisits || incompleteVisits.length === 0 ? (
-            <p className="text-sm text-neutral-400">盛り付け待ちの訪問はありません。</p>
+      <section className="flex flex-col items-center gap-4 py-8">
+        <button
+          type="button"
+          onClick={handleInstantCheckIn}
+          disabled={checkingIn}
+          className="flex h-48 w-48 flex-col items-center justify-center gap-2 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
+        >
+          {checkingIn ? (
+            <span className="text-base font-semibold">登録中...</span>
           ) : (
-            <ul className="flex flex-col gap-2">
-              {incompleteVisits.map((visit) => (
-                <li key={visit.id}>
-                  <Link
-                    href={`/visits/${visit.id}/register`}
-                    className="flex items-center justify-between rounded-xl bg-neutral-900 px-4 py-3 focus:ring-2 focus:ring-amber-400"
-                  >
-                    <span>{visit.venue?.name || "店名未設定"}</span>
-                    <span className="text-xs text-neutral-400">
-                      {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <>
+              <span className="text-4xl">📍</span>
+              <span className="text-base font-semibold">今ココを瞬録</span>
+            </>
           )}
+        </button>
+      </section>
+
+      {incompleteVisits && incompleteVisits.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold text-amber-400">⚠️ 盛り付け待ち</h2>
+          <ul className="flex flex-col gap-2">
+            {incompleteVisits.map((visit) => (
+              <li key={visit.id}>
+                <Link
+                  href={`/visits/${visit.id}/register`}
+                  className="flex items-center justify-between rounded-xl bg-neutral-900 px-4 py-3 focus:ring-2 focus:ring-amber-400"
+                >
+                  <span>{visit.venue?.name || "店名未設定"}</span>
+                  <span className="text-xs text-neutral-400">
+                    {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

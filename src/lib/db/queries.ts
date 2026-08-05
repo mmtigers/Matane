@@ -10,7 +10,7 @@ async function attachVenue(visit: LocalVisit): Promise<VisitWithVenue> {
   return { ...visit, venue };
 }
 
-// 日中モードの「昨日の盛り付け待ち」リスト用。
+// ホーム画面の「盛り付け待ち」リスト用。
 export function useIncompleteVisits() {
   return useLiveQuery(async () => {
     const visits = await localDb.visits.toArray();
@@ -84,11 +84,12 @@ export function useSuggestedVenue() {
 // 完全にサイレントにならないよう、ユーザー自身がここで気づけるようにする。
 export function usePendingSyncCount() {
   return useLiveQuery(async () => {
-    const [pendingVenues, pendingVisits] = await Promise.all([
+    const [pendingVenues, pendingVisits, pendingDeletes] = await Promise.all([
       localDb.venues.where("syncStatus").equals("pending").count(),
       localDb.visits.where("syncStatus").equals("pending").count(),
+      localDb.pendingVisitDeletes.count(),
     ]);
-    return pendingVenues + pendingVisits;
+    return pendingVenues + pendingVisits + pendingDeletes;
   }, []);
 }
 

@@ -23,7 +23,7 @@ function emptyVisitFields(): VisitChoiceFields & { ai_tags: string[] } {
   };
 }
 
-// ホーム画面(夜間モード)の「📍今ココを瞬録」用。店名はこの時点では未確定のため
+// ホーム画面の「📍今ココを瞬録」用。店名はこの時点では未確定のため
 // Venueは位置情報のみでプレースホルダー生成し、盛り付け(二次登録)時に確定させる。
 export async function createInstantCheckIn(location: LatLng) {
   const venueId = crypto.randomUUID();
@@ -86,12 +86,15 @@ export async function createCheckInForVenue(venueId: string) {
   return visitId;
 }
 
-// 5秒間の「取り消す」スナックバー用。まだ同期されていない前提で即座にローカルから削除する。
+// 5秒間の「取り消す」スナックバー用。基本は未同期のはずだが、5秒の間にバック
+// グラウンド同期(オンライン復帰やトークン更新時)が先に走りsynced済みになる
+// ケースがあるため、その場合はdeleteVisitと同じ経路でcrowd側の削除もキューに積む
+// (単純delete()だとクラウドに孤児レコードが残り、他端末で復活してしまう)。
 export async function undoCheckIn(visitId: string) {
   const visit = await localDb.visits.get(visitId);
   if (!visit) return;
 
-  await localDb.visits.delete(visitId);
+  await deleteVisit(visitId);
   await localDb.venues.delete(visit.venue_id);
 }
 

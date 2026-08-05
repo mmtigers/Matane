@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 // 同名の店舗が複数存在する状態で検索結果を選んでも、タップした店舗と
 // 別の店舗に誤って紐付かないことを確認する。
 test.use({
-  geolocation: { latitude: 34.7818, longitude: 135.4386 },
+  geolocation: { latitude: 35.6812, longitude: 139.7671 },
   permissions: ["geolocation"],
 });
 
@@ -27,11 +27,7 @@ test("同名の店舗が複数あっても検索結果のクリック先と紐�
 
   // Venue B: 瞬録(GPS)で作成後、同じ店名を設定
   await page.goto("/");
-  // mode(夜間/日中)はクライアント側hydration後に確定するため、モード非依存の
-  // 要素(検索欄)が出るまで待ってからトグルボタンの有無を判定する。
   await page.waitForSelector("#venue-search");
-  const nightToggle = page.getByText("🌙 夜間モードに切替");
-  if (await nightToggle.isVisible().catch(() => false)) await nightToggle.click();
   await page.getByText("今ココを瞬録").click();
   await expect(page.getByText("チェックインしました")).toBeVisible();
   await page.waitForTimeout(5500);

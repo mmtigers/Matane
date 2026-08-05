@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { deleteVisit } from "@/lib/db/checkin";
 import { useVisitWithVenue } from "@/lib/db/queries";
+import { googleMapsUrl, osmEmbedUrl } from "@/lib/geo";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -96,6 +97,26 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
         <section className="rounded-2xl bg-neutral-900 p-4">
           <h2 className="text-sm font-semibold text-neutral-400">メモ</h2>
           <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-200">{visit.memo}</p>
+        </section>
+      )}
+
+      {visit.venue?.location && (
+        <section className="flex flex-col gap-2 rounded-2xl bg-neutral-900 p-4">
+          <h2 className="text-sm font-semibold text-neutral-400">📍 チェックインした場所</h2>
+          <iframe
+            title="チェックインした場所の地図"
+            src={osmEmbedUrl(visit.venue.location)}
+            className="h-48 w-full rounded-xl border-0"
+            loading="lazy"
+          />
+          <a
+            href={googleMapsUrl(visit.venue.location)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="self-start text-xs text-amber-400 underline underline-offset-2 focus:ring-2 focus:ring-amber-400"
+          >
+            Googleマップで開く
+          </a>
         </section>
       )}
 

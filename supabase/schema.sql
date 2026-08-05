@@ -2,6 +2,7 @@
 -- PRD section 4 に基づく2レイヤー構造 (Venues=店舗マスタ, Visits=訪問履歴)
 
 create extension if not exists "uuid-ossp";
+create extension if not exists postgis;
 
 create table if not exists venues (
   id uuid primary key default uuid_generate_v4(),
