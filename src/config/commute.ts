@@ -7,18 +7,21 @@ export interface CommuteDestination {
   defaultLastTrain: string;
 }
 
+// ラベル・終電目安時刻は個人の生活圏に依存する情報のため、ソースにハードコードせず
+// 環境変数から与える(未設定時は汎用的な既定値にフォールバックする)。実際の値は
+// .env.local(gitignore対象)やVercelの環境変数に設定する。
 export const commuteDestinations: CommuteDestination[] = [
   {
     id: "home",
-    label: "自宅（[redacted]方面）",
+    label: process.env.NEXT_PUBLIC_COMMUTE_HOME_LABEL ?? "自宅",
     lastTrainByStation: {},
-    defaultLastTrain: "24:00",
+    defaultLastTrain: process.env.NEXT_PUBLIC_COMMUTE_HOME_LAST_TRAIN ?? "24:00",
   },
   {
     id: "work",
-    label: "赴任先（[redacted]方面）",
+    label: process.env.NEXT_PUBLIC_COMMUTE_WORK_LABEL ?? "職場",
     lastTrainByStation: {},
-    defaultLastTrain: "23:30",
+    defaultLastTrain: process.env.NEXT_PUBLIC_COMMUTE_WORK_LAST_TRAIN ?? "23:30",
   },
 ];
 
