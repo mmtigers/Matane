@@ -154,7 +154,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
       <header>
-        <h1 className="text-lg font-bold">盛り付け</h1>
+        <h1 className="text-lg font-bold">登録</h1>
         <p className="text-xs text-neutral-400">
           {new Date(visit.visited_at).toLocaleString("ja-JP")}
         </p>

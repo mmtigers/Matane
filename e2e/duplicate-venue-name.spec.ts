@@ -34,7 +34,7 @@ test("同名の店舗が複数あっても検索結果のクリック先と紐�
   await page.waitForTimeout(5500);
 
   await page.goto("/timeline");
-  await page.locator('span:has-text("盛り付け待ち")').first().click();
+  await page.locator('span:has-text("登録待ち")').first().click();
   await page.waitForURL(/\/visits\/.+\/register/);
   const visitIdB = page.url().match(/visits\/([^/]+)\/register/)?.[1] as string;
   await page.fill("#venue-name", "回帰テスト店");

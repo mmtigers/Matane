@@ -1,4 +1,4 @@
-// 盛り付け画面のChoiceChips・タイムラインのフィルター等で使う選択肢の単一情報源。
+// 登録画面のChoiceChips・タイムラインのフィルター等で使う選択肢の単一情報源。
 // 型はここから派生させるため、値の追加・削除がこのファイルだけで完結する。
 export const WHO_OPTIONS = ["1人", "家族", "友人", "仕事/上司"] as const;
 export const REVISIT_OPTIONS = ["絶対行く", "機会あり", "1回でいい"] as const;
