@@ -23,14 +23,15 @@ function emptyVisitFields(): VisitChoiceFields & { ai_tags: string[] } {
   };
 }
 
-// ホーム画面の「📍今ココを瞬録」用。店名はこの時点では未確定のため
-// Venueは位置情報のみでプレースホルダー生成し、盛り付け(二次登録)時に確定させる。
-export async function createInstantCheckIn(location: LatLng) {
+// ホーム画面の「📍今ココを瞬録」用。タップ時に店名を聞き、わかれば即確定する。
+// わからず空欄の場合はVenueを位置情報のみのプレースホルダーとして作成し、
+// 盛り付け(二次登録)時に確定させる。
+export async function createInstantCheckIn(location: LatLng, name = "") {
   const venueId = crypto.randomUUID();
   const venue: LocalVenue = {
     id: venueId,
     place_id: null,
-    name: "",
+    name: name.trim().slice(0, VENUE_NAME_MAX_LENGTH),
     location,
     address: null,
     nearest_station: null,
