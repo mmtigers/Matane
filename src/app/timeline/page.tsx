@@ -119,8 +119,10 @@ export default function TimelinePage() {
                               alt=""
                               className="h-full w-full object-cover"
                             />
+                          ) : visit.alcohol_tags.length > 0 ? (
+                            ALCOHOL_ICONS[visit.alcohol_tags[0]]
                           ) : (
-                            "🍶"
+                            "🏮"
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
