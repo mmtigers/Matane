@@ -37,7 +37,7 @@ export async function createInstantCheckIn(location: LatLng) {
   };
   await localDb.venues.add(venue);
 
-  return createVisitForVenue(venueId);
+  return createCheckInForVenue(venueId);
 }
 
 // ホーム画面共通の「後から登録（店名・駅名検索）」用。既存の店名と完全一致する場合は
@@ -66,10 +66,12 @@ export async function createCheckInByVenueName(name: string) {
     await localDb.venues.add(venue);
   }
 
-  return createVisitForVenue(venueId);
+  return createCheckInForVenue(venueId);
 }
 
-async function createVisitForVenue(venueId: string) {
+// ホーム画面の検索結果を直接タップした場合に使う。同名の別Venueが存在していても
+// 名前での再解決を挟まないため、表示されている店舗と紐付け先が食い違わない。
+export async function createCheckInForVenue(venueId: string) {
   const visitId = crypto.randomUUID();
   const visit: LocalVisit = {
     id: visitId,

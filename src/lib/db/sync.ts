@@ -1,12 +1,22 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Venue, Visit } from "@/types/models";
+import type { Visit } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 
 let syncing = false;
 
-function toVenueRecord(venue: LocalVenue): Venue {
+// SupabaseのlocationはPostGIS geography(point,4326)列で、プレーンな{lat,lng}オブジェクトを
+// upsertすると型キャストに失敗し、error（=永久にsyncStatus: "pending"のまま）になる。
+// geography列はEWKTテキスト("SRID=4326;POINT(lng lat)")を受け付けるため変換して送る。
+function toVenueRecord(venue: LocalVenue) {
   const { id, place_id, name, location, address, nearest_station } = venue;
-  return { id, place_id, name, location, address, nearest_station };
+  return {
+    id,
+    place_id,
+    name,
+    location: location ? `SRID=4326;POINT(${location.lng} ${location.lat})` : null,
+    address,
+    nearest_station,
+  };
 }
 
 // visitsテーブルはRLSで自分のuser_idの行のみ読み書きできるため、認証ユーザーIDを付与する。

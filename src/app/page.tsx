@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { AuthStatus } from "@/components/AuthStatus";
 import {
   createCheckInByVenueName,
+  createCheckInForVenue,
   createInstantCheckIn,
   scheduleBackgroundSync,
   undoCheckIn,
@@ -78,7 +79,12 @@ export default function HomePage() {
     setUndoVisitId(null);
   }
 
-  async function goToRegisterFor(name: string) {
+  async function goToRegisterForVenueId(venueId: string) {
+    const visitId = await createCheckInForVenue(venueId);
+    router.push(`/visits/${visitId}/register`);
+  }
+
+  async function goToRegisterForNewName(name: string) {
     const visitId = await createCheckInByVenueName(name);
     router.push(`/visits/${visitId}/register`);
   }
@@ -161,7 +167,7 @@ export default function HomePage() {
               <li key={venue.id}>
                 <button
                   type="button"
-                  onClick={() => goToRegisterFor(venue.name)}
+                  onClick={() => goToRegisterForVenueId(venue.id)}
                   className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-left"
                 >
                   {venue.name}
@@ -176,7 +182,7 @@ export default function HomePage() {
             <li>
               <button
                 type="button"
-                onClick={() => goToRegisterFor(searchQuery.trim())}
+                onClick={() => goToRegisterForNewName(searchQuery.trim())}
                 className="w-full rounded-xl border border-dashed border-neutral-700 px-4 py-3 text-left text-neutral-400"
               >
                 「{searchQuery.trim()}」で新規チェックイン

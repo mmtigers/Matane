@@ -67,9 +67,14 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   async function handleSave() {
     if (!visit) return;
 
+    const trimmedName = venueNameInput.trim();
+    if (needsVenueName && !trimmedName) {
+      window.alert("店名を入力してください");
+      return;
+    }
+
     setSaving(true);
     try {
-      const trimmedName = venueNameInput.trim();
       if (visit.venue && trimmedName && trimmedName !== visit.venue.name) {
         await setVenueName(visit.venue.id, trimmedName);
       }
