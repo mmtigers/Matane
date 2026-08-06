@@ -7,7 +7,6 @@ export interface PlaceCandidate {
 }
 
 const SEARCH_RADIUS_METERS = 150;
-const INCLUDED_TYPES = ["restaurant", "bar", "night_club", "cafe"];
 
 interface NearbyPlace {
   id?: string;
@@ -15,9 +14,10 @@ interface NearbyPlace {
   formattedAddress?: string;
 }
 
-// 瞬録(GPS)チェックインで店名が未確定のVenueに対し、周辺の飲食店候補を提示するための
-// Google Places API (New) Nearby Search呼び出し。APIキー未設定/失敗時は候補なし扱いに
-// して、手入力(既存フロー)には一切影響しないようにする。
+// 瞬録(GPS)チェックインで店名が未確定のVenueに対し、周辺の場所候補を提示するための
+// Google Places API (New) Nearby Search呼び出し。飲食店に限らず周辺の場所を広く候補と
+// して出したいので includedTypes は指定しない(未指定で全タイプが対象になる)。
+// APIキー未設定/失敗時は候補なし扱いにして、手入力(既存フロー)には一切影響しないようにする。
 export async function searchNearbyVenues(location: LatLng): Promise<PlaceCandidate[]> {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
   if (!apiKey) return [];
@@ -31,7 +31,6 @@ export async function searchNearbyVenues(location: LatLng): Promise<PlaceCandida
         "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress",
       },
       body: JSON.stringify({
-        includedTypes: INCLUDED_TYPES,
         maxResultCount: 10,
         languageCode: "ja",
         locationRestriction: {
