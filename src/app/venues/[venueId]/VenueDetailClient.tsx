@@ -11,6 +11,7 @@ import {
 } from "@/config/commute";
 import { duplicateVisit, toggleVenueWish } from "@/lib/db/checkin";
 import { useVenue, useVisitsForVenue } from "@/lib/db/queries";
+import { googleMapsUrl } from "@/lib/geo";
 
 export function VenueDetailClient({ venueId }: { venueId: string }) {
   const venue = useVenue(venueId);
@@ -18,11 +19,18 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
   const router = useRouter();
   const [checkingIn, setCheckingIn] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!shareCopied) return;
+    const timer = setTimeout(() => setShareCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [shareCopied]);
 
   const priorityId = useMemo(() => getPriorityDestinationId(now), [now]);
   const latestCompleted = visits?.find((visit) => visit.is_completed) ?? null;
@@ -36,6 +44,28 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
     } finally {
       setCheckingIn(false);
     }
+  }
+
+  async function handleShare() {
+    if (!venue) return;
+    const lines = [venue.name || "店名未設定"];
+    if (venue.nearest_station) lines.push(`最寄り駅: ${venue.nearest_station}`);
+    if (venue.address) lines.push(venue.address);
+    const mapUrl = venue.location ? googleMapsUrl(venue.location) : undefined;
+    const text = lines.join("\n");
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: venue.name || "Matane", text, url: mapUrl });
+      } catch (error) {
+        // ユーザーが共有シートをキャンセルした場合のAbortErrorは無視する。
+        if ((error as DOMException).name !== "AbortError") console.error(error);
+      }
+      return;
+    }
+
+    await navigator.clipboard.writeText(mapUrl ? `${text}\n${mapUrl}` : text);
+    setShareCopied(true);
   }
 
   if (!venue || !visits) {
@@ -52,17 +82,32 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
           )}
           {venue.address && <p className="text-xs text-neutral-400">{venue.address}</p>}
         </div>
-        <button
-          type="button"
-          onClick={() => toggleVenueWish(venueId, !venue.is_wished)}
-          aria-label={venue.is_wished ? "行きたいリストから外す" : "行きたいリストに追加"}
-          aria-pressed={venue.is_wished}
-          className={`flex h-11 w-11 flex-none items-center justify-center rounded-full text-xl transition-colors focus:ring-2 focus:ring-amber-400 ${
-            venue.is_wished ? "bg-amber-400/20 text-amber-300" : "bg-neutral-900 text-neutral-500"
-          }`}
-        >
-          {venue.is_wished ? "⭐" : "☆"}
-        </button>
+        <div className="flex flex-none flex-col items-end gap-2">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleShare}
+              aria-label="この店を共有する"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-900 text-xl text-neutral-300 transition-colors focus:ring-2 focus:ring-amber-400"
+            >
+              📤
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleVenueWish(venueId, !venue.is_wished)}
+              aria-label={venue.is_wished ? "行きたいリストから外す" : "行きたいリストに追加"}
+              aria-pressed={venue.is_wished}
+              className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-colors focus:ring-2 focus:ring-amber-400 ${
+                venue.is_wished
+                  ? "bg-amber-400/20 text-amber-300"
+                  : "bg-neutral-900 text-neutral-500"
+              }`}
+            >
+              {venue.is_wished ? "⭐" : "☆"}
+            </button>
+          </div>
+          {shareCopied && <span className="text-xs text-amber-300">コピーしました</span>}
+        </div>
       </header>
 
       {latestCompleted && (

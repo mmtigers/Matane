@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { BarRow } from "@/components/BarRow";
 import { useTimelineVisits } from "@/lib/db/queries";
 import { alcoholTagFrequency, monthlyVisitCounts, overallAverageBudget, whoFrequency } from "@/lib/stats";
+import { downloadTextFile, visitsToCsv, visitsToIcs } from "@/lib/export";
 
 export default function StatsPage() {
   const visits = useTimelineVisits();
@@ -22,6 +23,14 @@ export default function StatsPage() {
     () => new Set(completed.map((visit) => visit.venue_id)).size,
     [completed]
   );
+
+  function handleExportCsv() {
+    downloadTextFile("matane-visits.csv", visitsToCsv(completed), "text/csv;charset=utf-8");
+  }
+
+  function handleExportIcs() {
+    downloadTextFile("matane-visits.ics", visitsToIcs(completed), "text/calendar;charset=utf-8");
+  }
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
@@ -82,6 +91,26 @@ export default function StatsPage() {
               </div>
             </section>
           )}
+
+          <section className="flex flex-col gap-3 rounded-2xl bg-neutral-900 p-4">
+            <h2 className="text-sm font-semibold text-neutral-400">エクスポート</h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400 active:bg-neutral-700"
+              >
+                CSVで書き出す
+              </button>
+              <button
+                type="button"
+                onClick={handleExportIcs}
+                className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400 active:bg-neutral-700"
+              >
+                カレンダーに書き出す
+              </button>
+            </div>
+          </section>
         </>
       )}
     </main>
