@@ -41,3 +41,27 @@ export function getLastTrainTime(
   }
   return destination.defaultLastTrain;
 }
+
+// 5時始まりの「営業日」内での経過分数に正規化する。飲み会の帰宅アラートは
+// 深夜0時〜早朝に使われることが多く、素朴に「今日の日付+時刻」で比較すると
+// 日付を跨いだ瞬間に「終電まであと22時間」のような誤った残り時間になって
+// しまうため、5時未満の時刻は前日の深夜として扱う。
+const SERVICE_DAY_START_MINUTES = 5 * 60;
+
+function serviceMinutesOfDay(totalMinutes: number): number {
+  const offset = totalMinutes - SERVICE_DAY_START_MINUTES;
+  return ((offset % 1440) + 1440) % 1440;
+}
+
+// "HH:mm"形式の最終電車時刻(24:00表記も許容)までの残り分数を返す。
+// 既に過ぎている場合は負の値になる(呼び出し側で「終電を逃した」表示に使う)。
+export function getMinutesUntilLastTrain(lastTrainTime: string, now: Date): number {
+  const [hourStr, minuteStr] = lastTrainTime.split(":");
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return Infinity;
+
+  const nowOffset = serviceMinutesOfDay(now.getHours() * 60 + now.getMinutes());
+  const targetOffset = serviceMinutesOfDay(hour * 60 + minute);
+  return targetOffset - nowOffset;
+}

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { uploadVisitPhotoIfNeeded } from "@/lib/storage";
 import type { LatLng, Visit } from "@/types/models";
@@ -6,12 +7,51 @@ import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 let syncing = false;
 let pulling = false;
 
+// Postgresのunique_violation。venues.place_idのunique制約に当たった場合に使う。
+const UNIQUE_VIOLATION = "23505";
+
+// 複数端末でほぼ同時に同じ場所へチェックインした場合など、ローカルの重複チェック
+// (findVenueByPlaceId)をすり抜けてplace_idが衝突することがある。その場合、この
+// ローカルVenueはクラウドには存在しない「取り残された複製」なので、クラウド上の
+// 本物のVenueを検索し、参照しているVisitをそちらへ差し替えて自己修復する
+// (放置すると該当Venue/Visitが永久にsyncStatus: "pending"のまま残ってしまう)。
+async function reconcileDuplicatePlaceId(
+  supabase: SupabaseClient,
+  localVenue: LocalVenue
+): Promise<boolean> {
+  if (!localVenue.place_id) return false;
+
+  const { data } = await supabase
+    .from("venues")
+    .select("*")
+    .eq("place_id", localVenue.place_id)
+    .neq("id", localVenue.id)
+    .limit(1);
+
+  const existingRow = data?.[0] as CloudVenueRow | undefined;
+  if (!existingRow) return false;
+
+  // 他端末側のVenueをこの端末にも取り込んでおく(無いと差し替え直後は
+  // 一時的に「店名未設定」表示になり、次回pullFromCloudまで解消しない)。
+  await localDb.venues.put(fromVenueRecord(existingRow));
+
+  const affectedVisits = await localDb.visits.where("venue_id").equals(localVenue.id).toArray();
+  await localDb.visits.bulkUpdate(
+    affectedVisits.map((v) => ({
+      key: v.id,
+      changes: { venue_id: existingRow.id, syncStatus: "pending" as const },
+    }))
+  );
+  await localDb.venues.delete(localVenue.id);
+  return true;
+}
+
 // SupabaseのlocationはPostGIS geography(point,4326)列で、プレーンな{lat,lng}オブジェクトを
 // upsertすると型キャストに失敗し、error（=永久にsyncStatus: "pending"のまま）になる。
 // geography列はEWKTテキスト("SRID=4326;POINT(lng lat)")を受け付けるため変換して送る。
 // created_byはRLSのINSERT/UPDATEポリシーが要求するため必須で付与する。
 function toVenueRecord(venue: LocalVenue, userId: string) {
-  const { id, place_id, name, location, address, nearest_station } = venue;
+  const { id, place_id, name, location, address, nearest_station, is_wished } = venue;
   return {
     id,
     place_id,
@@ -19,6 +59,7 @@ function toVenueRecord(venue: LocalVenue, userId: string) {
     location: location ? `SRID=4326;POINT(${location.lng} ${location.lat})` : null,
     address,
     nearest_station,
+    is_wished: is_wished ?? false,
     created_by: userId,
   };
 }
@@ -80,6 +121,7 @@ interface CloudVenueRow {
   location: unknown;
   address: string | null;
   nearest_station: string | null;
+  is_wished?: boolean | null;
 }
 
 interface CloudVisitRow extends Visit {
@@ -94,6 +136,7 @@ function fromVenueRecord(row: CloudVenueRow): LocalVenue {
     location: fromCloudLocation(row.location),
     address: row.address,
     nearest_station: row.nearest_station,
+    is_wished: row.is_wished ?? false,
     syncStatus: "synced",
   };
 }
@@ -151,16 +194,34 @@ export async function syncPendingChanges() {
       .toArray();
 
     if (pendingVenues.length > 0) {
-      const { error } = await supabase
-        .from("venues")
-        .upsert(pendingVenues.map((v) => toVenueRecord(v, userId)));
+      const venueRecords = pendingVenues.map((v) => toVenueRecord(v, userId));
+      const { error } = await supabase.from("venues").upsert(venueRecords);
 
-      if (error) {
-        console.warn(`venues同期に失敗しました(${pendingVenues.length}件):`, error);
-      } else {
+      if (!error) {
         await localDb.venues.bulkUpdate(
           pendingVenues.map((v) => ({ key: v.id, changes: { syncStatus: "synced" as const } }))
         );
+      } else {
+        // 一括upsertは1件でもエラー(unique制約違反等)になると全体が失敗するため、
+        // 失敗時のみ1件ずつ再試行し、問題のない他のレコードまで巻き込まれないようにする。
+        console.warn(
+          `venues一括同期に失敗しました(${pendingVenues.length}件)。1件ずつ再試行します:`,
+          error
+        );
+        for (let i = 0; i < pendingVenues.length; i++) {
+          const { error: rowError } = await supabase.from("venues").upsert(venueRecords[i]);
+          if (!rowError) {
+            await localDb.venues.update(pendingVenues[i].id, { syncStatus: "synced" });
+            continue;
+          }
+
+          const reconciled =
+            rowError.code === UNIQUE_VIOLATION &&
+            (await reconcileDuplicatePlaceId(supabase, pendingVenues[i]));
+          if (!reconciled) {
+            console.warn(`venue同期に失敗しました(id=${pendingVenues[i].id}):`, rowError);
+          }
+        }
       }
     }
 
@@ -185,12 +246,24 @@ export async function syncPendingChanges() {
 
       const { error } = await supabase.from("visits").upsert(visitRecords);
 
-      if (error) {
-        console.warn(`visits同期に失敗しました(${pendingVisits.length}件):`, error);
-      } else {
+      if (!error) {
         await localDb.visits.bulkUpdate(
           pendingVisits.map((v) => ({ key: v.id, changes: { syncStatus: "synced" as const } }))
         );
+      } else {
+        // venues同様、1件のエラーで一括upsert全体が失敗するため1件ずつ再試行する。
+        console.warn(
+          `visits一括同期に失敗しました(${pendingVisits.length}件)。1件ずつ再試行します:`,
+          error
+        );
+        for (let i = 0; i < pendingVisits.length; i++) {
+          const { error: rowError } = await supabase.from("visits").upsert(visitRecords[i]);
+          if (rowError) {
+            console.warn(`visit同期に失敗しました(id=${pendingVisits[i].id}):`, rowError);
+          } else {
+            await localDb.visits.update(pendingVisits[i].id, { syncStatus: "synced" });
+          }
+        }
       }
     }
 

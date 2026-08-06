@@ -11,9 +11,14 @@ create table if not exists venues (
   location geography(point, 4326),
   address text,
   nearest_station text,
+  is_wished boolean not null default false,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
+
+-- 既存環境向けマイグレーション: is_wished列が無い場合のみ追加する(新規作成時は
+-- 上のcreate table if not existsで既に含まれているため実質no-op)。
+alter table venues add column if not exists is_wished boolean not null default false;
 
 create table if not exists visits (
   id uuid primary key default uuid_generate_v4(),

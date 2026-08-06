@@ -13,6 +13,7 @@ const LAST_SENT_KEY = "matane:lastOtpSentAt";
 function getRemainingCooldown(): number {
   if (typeof window === "undefined") return 0;
   const lastSent = Number(window.localStorage.getItem(LAST_SENT_KEY) ?? 0);
+  if (!Number.isFinite(lastSent)) return 0;
   const elapsedSeconds = (Date.now() - lastSent) / 1000;
   return Math.max(0, Math.ceil(COOLDOWN_SECONDS - elapsedSeconds));
 }

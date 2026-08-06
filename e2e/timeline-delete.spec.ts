@@ -13,5 +13,8 @@ test("タイムラインから記録を削除できる(確認モーダル経由)
   await expect(page.getByRole("alertdialog")).toBeVisible();
   await page.getByRole("button", { name: "削除する" }).click();
 
-  await expect(page.getByText("削除テスト店")).not.toBeVisible();
+  // exact指定なし(部分一致)だと、閉じきる前のConfirmDialogの確認メッセージ
+  // (「削除テスト店を削除しますか？...」)にも一致してstrict modeエラーになる
+  // ことがあるため、タイムライン項目のテキストと完全一致するものだけを見る。
+  await expect(page.getByText("削除テスト店", { exact: true })).not.toBeVisible();
 });

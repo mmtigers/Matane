@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   commuteDestinations,
   getLastTrainTime,
+  getMinutesUntilLastTrain,
   getPriorityDestinationId,
 } from "@/config/commute";
-import { duplicateVisit } from "@/lib/db/checkin";
+import { duplicateVisit, toggleVenueWish } from "@/lib/db/checkin";
 import { useVenue, useVisitsForVenue } from "@/lib/db/queries";
 
 export function VenueDetailClient({ venueId }: { venueId: string }) {
@@ -16,8 +17,14 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
   const visits = useVisitsForVenue(venueId);
   const router = useRouter();
   const [checkingIn, setCheckingIn] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
-  const priorityId = useMemo(() => getPriorityDestinationId(new Date()), []);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const priorityId = useMemo(() => getPriorityDestinationId(now), [now]);
   const latestCompleted = visits?.find((visit) => visit.is_completed) ?? null;
 
   async function handleRepeatCheckIn() {
@@ -37,12 +44,25 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
-      <header>
-        <h1 className="text-lg font-bold">{venue.name || "店名未設定"}</h1>
-        {venue.nearest_station && (
-          <p className="text-xs text-neutral-400">最寄り駅: {venue.nearest_station}</p>
-        )}
-        {venue.address && <p className="text-xs text-neutral-400">{venue.address}</p>}
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold">{venue.name || "店名未設定"}</h1>
+          {venue.nearest_station && (
+            <p className="text-xs text-neutral-400">最寄り駅: {venue.nearest_station}</p>
+          )}
+          {venue.address && <p className="text-xs text-neutral-400">{venue.address}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={() => toggleVenueWish(venueId, !venue.is_wished)}
+          aria-label={venue.is_wished ? "行きたいリストから外す" : "行きたいリストに追加"}
+          aria-pressed={venue.is_wished}
+          className={`flex h-11 w-11 flex-none items-center justify-center rounded-full text-xl transition-colors focus:ring-2 focus:ring-amber-400 ${
+            venue.is_wished ? "bg-amber-400/20 text-amber-300" : "bg-neutral-900 text-neutral-500"
+          }`}
+        >
+          {venue.is_wished ? "⭐" : "☆"}
+        </button>
       </header>
 
       {latestCompleted && (
@@ -112,21 +132,36 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
       <section className="flex flex-col gap-2 rounded-2xl bg-neutral-900 p-4">
         <h2 className="text-sm font-semibold text-amber-400">🚃 終電・帰宅アラート</h2>
         <ul className="flex flex-col gap-1">
-          {commuteDestinations.map((destination) => (
-            <li
-              key={destination.id}
-              className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
-                destination.id === priorityId
-                  ? "bg-amber-400/10 text-amber-300"
-                  : "text-neutral-300"
-              }`}
-            >
-              <span>{destination.label}</span>
-              <span className="font-mono">
-                {getLastTrainTime(destination, venue.nearest_station)}
-              </span>
-            </li>
-          ))}
+          {commuteDestinations.map((destination) => {
+            const lastTrainTime = getLastTrainTime(destination, venue.nearest_station);
+            const minutesLeft = getMinutesUntilLastTrain(lastTrainTime, now);
+            const missed = minutesLeft < 0;
+            const urgent = !missed && minutesLeft <= 30;
+            return (
+              <li
+                key={destination.id}
+                className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+                  urgent
+                    ? "bg-red-500/10 text-red-300"
+                    : destination.id === priorityId
+                      ? "bg-amber-400/10 text-amber-300"
+                      : "text-neutral-300"
+                }`}
+              >
+                <span>{destination.label}</span>
+                <span className="flex items-center gap-2">
+                  <span className="font-mono">{lastTrainTime}</span>
+                  <span className="text-xs">
+                    {missed
+                      ? "終電を逃しました"
+                      : Number.isFinite(minutesLeft)
+                        ? `あと${minutesLeft}分`
+                        : ""}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
         </ul>
       </section>
     </main>

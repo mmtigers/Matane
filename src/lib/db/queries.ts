@@ -80,6 +80,16 @@ export function useSuggestedVenue() {
   }, []);
 }
 
+// 行きたい店一覧画面用。
+export function useWishedVenues() {
+  return useLiveQuery(async () => {
+    const venues = await localDb.venues.toArray();
+    return venues
+      .filter((venue) => venue.is_wished)
+      .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+  }, []);
+}
+
 // 「最後の同期からn件未送信」をホーム画面に出すためのカウント。sync失敗が
 // 完全にサイレントにならないよう、ユーザー自身がここで気づけるようにする。
 export function usePendingSyncCount() {
@@ -91,6 +101,12 @@ export function usePendingSyncCount() {
     ]);
     return pendingVenues + pendingVisits + pendingDeletes;
   }, []);
+}
+
+// place_id(Google PlacesのID)からVenueを引く。SupabaseのvenuesテーブルはplaceIdに
+// unique制約があるため、瞬録で場所候補を選ぶ際にVenueを重複作成しないよう使う。
+export async function findVenueByPlaceId(placeId: string): Promise<LocalVenue | undefined> {
+  return localDb.venues.where("place_id").equals(placeId).first();
 }
 
 export async function searchVenuesLocal(query: string): Promise<LocalVenue[]> {

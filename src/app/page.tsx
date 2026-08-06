@@ -281,24 +281,27 @@ export default function HomePage() {
                 setSelectedPlace(null);
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter") handleInstantCheckIn(instantNameInput);
+                if (event.key === "Enter" && !checkingIn) handleInstantCheckIn(instantNameInput);
               }}
               placeholder="候補にない場合は入力(わからなければ空欄でOK)"
               maxLength={VENUE_NAME_MAX_LENGTH}
-              className="mt-3 w-full rounded-xl bg-neutral-800 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
+              disabled={checkingIn}
+              className="mt-3 w-full rounded-xl bg-neutral-800 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
             />
             <div className="mt-4 flex gap-3">
               <button
                 type="button"
                 onClick={() => setShowNamePrompt(false)}
-                className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400"
+                disabled={checkingIn}
+                className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
                 キャンセル
               </button>
               <button
                 type="button"
                 onClick={() => handleInstantCheckIn(instantNameInput)}
-                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400"
+                disabled={checkingIn}
+                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
                 登録する
               </button>

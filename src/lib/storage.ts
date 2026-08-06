@@ -11,6 +11,13 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+// 保存パスの拡張子をBlobの実際のMIMEタイプに合わせる(imageCompressionの出力は
+// 常にJPEGとは限らないため、拡張子とcontentTypeが食い違わないようにする)。
+function extensionForMime(mime: string): string {
+  const subtype = mime.split("/")[1]?.split("+")[0];
+  return subtype && /^[a-z0-9]+$/i.test(subtype) ? subtype : "jpg";
+}
+
 // Visitのbest_photoがdata URL(ローカルで圧縮した写真)の場合、Supabase Storageへ
 // アップロードして軽量なURLに差し替える。一覧クエリ(pullFromCloud等)がbase64画像
 // ごと転送するのを防ぐため、クラウド側にはURLのみを保存する。ローカルのIndexedDB
@@ -25,7 +32,7 @@ export async function uploadVisitPhotoIfNeeded(
   try {
     const supabase = getSupabaseClient();
     const blob = dataUrlToBlob(photo);
-    const path = `${userId}/${visitId}.jpg`;
+    const path = `${userId}/${visitId}.${extensionForMime(blob.type)}`;
     const { error } = await supabase.storage
       .from(BUCKET)
       .upload(path, blob, { upsert: true, contentType: blob.type });

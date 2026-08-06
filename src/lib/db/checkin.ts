@@ -1,6 +1,6 @@
 import type { LatLng } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
-import { searchVenuesLocal } from "./queries";
+import { findVenueByPlaceId, searchVenuesLocal } from "./queries";
 import { syncPendingChanges } from "./sync";
 
 const VENUE_NAME_MAX_LENGTH = 100;
@@ -32,6 +32,14 @@ export async function createInstantCheckIn(
   name = "",
   place?: { placeId: string; address: string | null }
 ) {
+  // Supabase側のvenues.place_idはunique制約があるため、同じ場所に既存Venueがあれば
+  // 新規作成せず再利用する(重複作成するとその回のVenue/Visitとも同期が永久に失敗する)。
+  const existingVenue = place ? await findVenueByPlaceId(place.placeId) : undefined;
+
+  if (existingVenue) {
+    return createCheckInForVenue(existingVenue.id);
+  }
+
   const venueId = crypto.randomUUID();
   const venue: LocalVenue = {
     id: venueId,
@@ -40,6 +48,7 @@ export async function createInstantCheckIn(
     location,
     address: place?.address ?? null,
     nearest_station: null,
+    is_wished: false,
     syncStatus: "pending",
   };
   await localDb.venues.add(venue);
@@ -68,6 +77,7 @@ export async function createCheckInByVenueName(name: string) {
       location: null,
       address: null,
       nearest_station: null,
+      is_wished: false,
       syncStatus: "pending",
     };
     await localDb.venues.add(venue);
@@ -101,17 +111,46 @@ export async function undoCheckIn(visitId: string) {
   if (!visit) return;
 
   await deleteVisit(visitId);
-  await localDb.venues.delete(visit.venue_id);
+
+  const venue = await localDb.venues.get(visit.venue_id);
+  if (!venue) return;
+
+  // 既にクラウド同期済みのVenueはここで消さない。クラウド側にvenuesを削除する
+  // 手段(RLS)が無いため、ローカルだけ消すと「クラウドにだけ孤児として残る」状態に
+  // なり、後で同じ場所に再チェックインした際にplace_idの重複で同期が永久に
+  // 失敗する原因になる(ローカルに残しておけば次回はfindVenueByPlaceIdで再利用できる)。
+  if (venue.syncStatus === "synced") return;
+
+  // 他のVisitがまだ参照しているVenue(名前・駅名検索で再利用された既存店舗など)は
+  // 取り消し操作で巻き込んで消さない。
+  const otherVisitCount = await localDb.visits.where("venue_id").equals(visit.venue_id).count();
+  if (otherVisitCount === 0) {
+    await localDb.venues.delete(visit.venue_id);
+  }
 }
 
 // GPSのみで店名が未確定の瞬録に、登録画面から店名を確定させる。
 // 周辺店舗候補(Google Places)から選んだ場合はplaceId/addressも合わせて確定させる。
 export async function setVenueName(
+  visitId: string,
   venueId: string,
   name: string,
   place?: { placeId: string; address: string | null }
 ) {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
+
+  // Supabase側のvenues.place_idはunique制約があるため、選んだ場所が既に別Venueとして
+  // 存在する場合はこのVenueにplace_idを設定せず、Visitの紐付け先をその既存Venueへ
+  // 差し替える(そのままplace_idを重複させるとクラウド同期が永久に失敗する)。
+  const existingVenue = place ? await findVenueByPlaceId(place.placeId) : undefined;
+  if (existingVenue && existingVenue.id !== venueId) {
+    await localDb.visits.update(visitId, {
+      venue_id: existingVenue.id,
+      syncStatus: "pending",
+    });
+    return;
+  }
+
   await localDb.venues.update(venueId, {
     name: trimmed,
     syncStatus: "pending",
@@ -168,6 +207,12 @@ export async function deleteVisit(visitId: string) {
     await localDb.pendingVisitDeletes.put({ id: visitId });
     scheduleBackgroundSync();
   }
+}
+
+// 店舗詳細画面の「行きたい」トグル用。
+export async function toggleVenueWish(venueId: string, isWished: boolean) {
+  await localDb.venues.update(venueId, { is_wished: isWished, syncStatus: "pending" });
+  scheduleBackgroundSync();
 }
 
 // 1分放置の自動保存トリガー。呼び出し元でsetTimeoutと組み合わせる。

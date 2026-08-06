@@ -123,6 +123,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
       if (visit.venue && trimmedName && trimmedName !== visit.venue.name) {
         const place = selectedPlace?.name === trimmedName ? selectedPlace : undefined;
         await setVenueName(
+          visitId,
           visit.venue.id,
           trimmedName,
           place ? { placeId: place.placeId, address: place.address } : undefined

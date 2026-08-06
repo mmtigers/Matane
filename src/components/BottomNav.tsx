@@ -6,6 +6,9 @@ import { usePathname } from "next/navigation";
 const items = [
   { href: "/", label: "ホーム", icon: "🏠" },
   { href: "/timeline", label: "タイムライン", icon: "📅" },
+  { href: "/wishlist", label: "行きたい", icon: "⭐" },
+  { href: "/stats", label: "統計", icon: "📊" },
+  { href: "/map", label: "マップ", icon: "🗺️" },
 ] as const;
 
 // 片手操作前提のため画面下部に固定。iOSのホームインジケーター分もセーフエリアで確保する。

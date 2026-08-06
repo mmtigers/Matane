@@ -14,6 +14,7 @@ export interface Venue {
   location: LatLng | null;
   address: string | null;
   nearest_station: string | null;
+  is_wished: boolean;
 }
 
 export interface Visit {
