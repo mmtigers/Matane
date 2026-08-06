@@ -62,11 +62,21 @@ create policy "venues are insertable by authenticated users"
   to authenticated
   with check (created_by = auth.uid());
 
-create policy "venues are updatable by their creator"
+-- 既存環境向けマイグレーション: 旧ポリシー(作成者のみ更新可)が残っていれば削除する
+-- (新規作成時は元々存在しないため実質no-op)。
+drop policy if exists "venues are updatable by their creator" on venues;
+
+-- venuesは全認証ユーザーが参照可能な共有マスタ(上のselectポリシー参照)であり、
+-- 同じ実店舗(同じGoogle place_id)に別ユーザーが後からチェックインしてVenueを
+-- 再利用するケースがある。updateをcreated_by=auth.uid()に限定すると、作成者以外の
+-- ユーザーが店名修正や「行きたい」トグルをした際にRLSで弾かれ、syncStatusが
+-- 永久にpendingのまま残ってしまう(selectの開放性とupdateの制限が矛盾していた)。
+-- そのためupdateもselectと同様に全認証ユーザーに開放する。
+create policy "venues are updatable by authenticated users"
   on venues for update
   to authenticated
-  using (created_by = auth.uid())
-  with check (created_by = auth.uid());
+  using (true)
+  with check (true);
 
 -- Visits は本人のデータのみ読み書き可能
 create policy "visits are readable by owner"

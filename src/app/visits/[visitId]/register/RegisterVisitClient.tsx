@@ -4,6 +4,7 @@ import imageCompression from "browser-image-compression";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { ChoiceChips } from "@/components/ChoiceChips";
+import { Skeleton } from "@/components/Skeleton";
 import {
   ALCOHOL_OPTIONS,
   BUDGET_OPTIONS,
@@ -19,6 +20,7 @@ import {
 import { completeVisitRegistration, setVenueName } from "@/lib/db/checkin";
 import { useVisitWithVenue } from "@/lib/db/queries";
 import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
+import { SAVED_TOAST_KEY } from "@/lib/sessionFlags";
 
 const MAX_UPLOAD_BYTES = 20_000_000;
 const MEMO_MAX_LENGTH = 2000;
@@ -140,6 +142,8 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
         memo: memo.trim() ? memo.trim() : null,
       });
 
+      // タイムライン側で「保存しました」トーストを出すための一時フラグ。
+      window.sessionStorage.setItem(SAVED_TOAST_KEY, String(Date.now()));
       router.push("/timeline");
     } finally {
       setSaving(false);
@@ -147,7 +151,14 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   }
 
   if (!visit) {
-    return <main className="px-4 pt-8 text-sm text-neutral-400">読み込み中...</main>;
+    return (
+      <main className="mx-auto flex max-w-md flex-col gap-4 px-4 pt-8">
+        <Skeleton className="h-6 w-24" />
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </main>
+    );
   }
 
   const needsVenueName = !visit.venue?.name;

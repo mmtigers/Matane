@@ -11,7 +11,6 @@ const LAST_SENT_KEY = "matane:lastOtpSentAt";
 // ページ再読み込みでもクールダウンが効くよう、送信時刻をlocalStorageに残して判定する
 // (コンポーネントのstateだけだと、遷移してすぐ戻れば連打できてしまうため)。
 function getRemainingCooldown(): number {
-  if (typeof window === "undefined") return 0;
   const lastSent = Number(window.localStorage.getItem(LAST_SENT_KEY) ?? 0);
   if (!Number.isFinite(lastSent)) return 0;
   const elapsedSeconds = (Date.now() - lastSent) / 1000;
@@ -25,10 +24,17 @@ export default function LoginPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // 初期値はlazy initializerで計算する(useEffect内でのsetStateは避ける)。
-  // SSR時点ではlocalStorageが無いため常に0を返し、直近に送信していた場合のみ
-  // hydration後の初回レンダーでクールダウン表示に切り替わる。
-  const [cooldown, setCooldown] = useState<number>(() => getRemainingCooldown());
+  // localStorageはSSR時点で読めないため、初期値はSSRと揃えて0にし、マウント後の
+  // effectで実際のクールダウン残り時間に反映する(hydrationミスマッチを避けるため)。
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    const remaining = getRemainingCooldown();
+    if (remaining > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorageの値はSSR時点で読めないため、マウント後に一度だけ反映する
+      setCooldown(remaining);
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading && session) {

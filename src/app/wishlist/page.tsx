@@ -1,11 +1,34 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { SkeletonList } from "@/components/Skeleton";
 import { toggleVenueWish } from "@/lib/db/checkin";
+import type { LocalVenue } from "@/lib/db/localDb";
 import { useWishedVenues } from "@/lib/db/queries";
+
+const UNDO_VISIBLE_MS = 5000;
 
 export default function WishlistPage() {
   const venues = useWishedVenues();
+  const [undoVenue, setUndoVenue] = useState<LocalVenue | null>(null);
+
+  useEffect(() => {
+    if (!undoVenue) return;
+    const timer = setTimeout(() => setUndoVenue(null), UNDO_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [undoVenue]);
+
+  async function handleRemove(venue: LocalVenue) {
+    await toggleVenueWish(venue.id, false);
+    setUndoVenue(venue);
+  }
+
+  async function handleUndo() {
+    if (!undoVenue) return;
+    await toggleVenueWish(undoVenue.id, true);
+    setUndoVenue(null);
+  }
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
@@ -14,10 +37,10 @@ export default function WishlistPage() {
       </header>
 
       {!venues ? (
-        <p className="text-sm text-neutral-400">読み込み中...</p>
+        <SkeletonList />
       ) : venues.length === 0 ? (
         <p className="text-sm text-neutral-400">
-          店舗詳細画面の☆ボタンから「行きたい店」に追加できます。
+          店舗詳細画面の☆ボタンや、ホーム画面の検索から「行きたい店」に追加できます。
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -36,7 +59,7 @@ export default function WishlistPage() {
               </Link>
               <button
                 type="button"
-                onClick={() => toggleVenueWish(venue.id, false)}
+                onClick={() => handleRemove(venue)}
                 aria-label="行きたいリストから外す"
                 className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-lg text-amber-300 focus:ring-2 focus:ring-amber-400 active:bg-neutral-800"
               >
@@ -45,6 +68,21 @@ export default function WishlistPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {undoVenue && (
+        <div className="fixed inset-x-4 bottom-24 z-50 flex items-center justify-between rounded-xl bg-neutral-800 px-4 py-3 shadow-lg">
+          <span className="text-sm">
+            {undoVenue.name || "この店"}を行きたいから外しました
+          </span>
+          <button
+            type="button"
+            onClick={handleUndo}
+            className="text-sm font-semibold text-amber-400 focus:ring-2 focus:ring-amber-400"
+          >
+            取り消す
+          </button>
+        </div>
       )}
     </main>
   );

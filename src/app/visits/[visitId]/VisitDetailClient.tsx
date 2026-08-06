@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Skeleton } from "@/components/Skeleton";
 import { deleteVisit } from "@/lib/db/checkin";
 import { useVisitWithVenue } from "@/lib/db/queries";
 import { googleMapsUrl, osmEmbedUrl } from "@/lib/geo";
@@ -36,7 +37,13 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
   }
 
   if (!visit) {
-    return <main className="px-4 pt-8 text-sm text-neutral-400">読み込み中...</main>;
+    return (
+      <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-64 w-full rounded-2xl" />
+        <Skeleton className="h-40 w-full rounded-2xl" />
+      </main>
+    );
   }
 
   if (!visit.is_completed) {

@@ -56,6 +56,36 @@ export async function createInstantCheckIn(
   return createCheckInForVenue(venueId);
 }
 
+// ホーム画面の検索から、チェックインを経由せず直接「行きたい」へ追加する用。
+// まだ行ったことのない店(友人に勧められた等)を気軽に記録できるようにする。
+// 同名の既存Venueがあれば新規作成せず、その行きたいフラグだけ立てる。
+export async function createWishOnlyVenue(name: string): Promise<string> {
+  const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
+  if (!trimmed) throw new Error("店名を入力してください");
+
+  const matches = await searchVenuesLocal(trimmed);
+  const exactMatch = matches.find((venue) => venue.name === trimmed);
+  if (exactMatch) {
+    await toggleVenueWish(exactMatch.id, true);
+    return exactMatch.id;
+  }
+
+  const venueId = crypto.randomUUID();
+  const venue: LocalVenue = {
+    id: venueId,
+    place_id: null,
+    name: trimmed,
+    location: null,
+    address: null,
+    nearest_station: null,
+    is_wished: true,
+    syncStatus: "pending",
+  };
+  await localDb.venues.add(venue);
+  scheduleBackgroundSync();
+  return venueId;
+}
+
 // ホーム画面共通の「後から登録（店名・駅名検索）」用。既存の店名と完全一致する場合は
 // キャッシュ済みのVenueを再利用し、無ければ入力名でプレースホルダーVenueを作る。
 export async function createCheckInByVenueName(name: string) {
@@ -120,6 +150,11 @@ export async function undoCheckIn(visitId: string) {
   // なり、後で同じ場所に再チェックインした際にplace_idの重複で同期が永久に
   // 失敗する原因になる(ローカルに残しておけば次回はfindVenueByPlaceIdで再利用できる)。
   if (venue.syncStatus === "synced") return;
+
+  // 「行きたい」登録済みのVenueは、たまたま訪問記録が0件になっていても消さない。
+  // (訪問記録とは独立してWishを保持できるのが仕様のため、GPS再チェックイン→
+  // 取り消しという無関係な操作でユーザーのWish登録が消えてしまうのを防ぐ)。
+  if (venue.is_wished) return;
 
   // 他のVisitがまだ参照しているVenue(名前・駅名検索で再利用された既存店舗など)は
   // 取り消し操作で巻き込んで消さない。

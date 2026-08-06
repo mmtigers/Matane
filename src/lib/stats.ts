@@ -62,3 +62,8 @@ export function whoFrequency(visits: VisitWithVenue[]): FrequencyItem[] {
 export function overallAverageBudget(visits: VisitWithVenue[]): number | null {
   return estimateAverageBudget(visits.flatMap((visit) => (visit.budget ? [visit.budget] : [])));
 }
+
+// fromの月からtoの月までの月数(両端を含む)。「全期間」の集計幅を求めるのに使う。
+export function monthsBetween(from: Date, to: Date): number {
+  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1;
+}

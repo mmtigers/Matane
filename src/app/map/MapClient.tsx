@@ -5,10 +5,14 @@ import L from "leaflet";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { Skeleton, SkeletonList } from "@/components/Skeleton";
 import { localDb, type LocalVenue } from "@/lib/db/localDb";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { distanceMeters, formatDistance, getCurrentLocation } from "@/lib/geo";
 import type { LatLng } from "@/types/models";
+
+const MAP_FILTER_STORAGE_KEY = "matane:mapFilter";
 
 // 東京駅。位置情報を持つ店舗が1件も無い場合のフォールバック中心座標。
 const DEFAULT_CENTER: [number, number] = [35.681236, 139.767125];
@@ -59,10 +63,21 @@ export default function MapClient() {
     return { venues, completedVenueIds };
   }, []);
 
-  const [filter, setFilter] = useState<MapFilter>("all");
+  // 直前に選んでいた絞り込みをセッション内で覚えておく(タブを出入りするたびに
+  // 選び直さなくて済むように)。位置情報は精度が古くなり得るため意図的に記憶しない。
+  const [filter, setFilter] = useState<MapFilter>(() => {
+    if (typeof window === "undefined") return "all";
+    const stored = window.sessionStorage.getItem(MAP_FILTER_STORAGE_KEY);
+    return stored === "visited" || stored === "wished" ? stored : "all";
+  });
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const isOnline = useOnlineStatus();
+
+  useEffect(() => {
+    window.sessionStorage.setItem(MAP_FILTER_STORAGE_KEY, filter);
+  }, [filter]);
 
   const located = useMemo<LocatedVenue[]>(
     () => (data?.venues ?? []).filter((venue): venue is LocatedVenue => venue.location !== null),
@@ -106,7 +121,14 @@ export default function MapClient() {
   }
 
   if (!data) {
-    return <p className="px-4 pt-8 text-sm text-neutral-400">読み込み中...</p>;
+    return (
+      <main className="mx-auto flex max-w-md flex-col gap-3 px-4 pt-6">
+        <Skeleton className="h-6 w-24" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-[55vh] w-full rounded-2xl" />
+        <SkeletonList />
+      </main>
+    );
   }
 
   const center: [number, number] = currentLocation
@@ -157,38 +179,49 @@ export default function MapClient() {
           </button>
           {locationError && <p className="text-xs text-red-300">{locationError}</p>}
 
-          <div className="h-[55vh] overflow-hidden rounded-2xl">
-            <MapContainer center={center} zoom={13} scrollWheelZoom className="h-full w-full">
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <RecenterOnLocation location={currentLocation} />
-              {currentLocation && (
-                <Marker
-                  position={[currentLocation.lat, currentLocation.lng]}
-                  icon={currentLocationIcon}
-                >
-                  <Popup>現在地</Popup>
-                </Marker>
-              )}
-              {sorted.map((venue) => (
-                <Marker
-                  key={venue.id}
-                  position={[venue.location.lat, venue.location.lng]}
-                  icon={venue.is_wished ? wishedIcon : visitedIcon}
-                >
-                  <Popup>
-                    <p className="font-semibold text-neutral-900">{venue.name || "店名未設定"}</p>
-                    <Link href={`/venues/${venue.id}`} className="text-amber-600 underline">
-                      店舗詳細を見る
-                    </Link>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-          </div>
-          <p className="text-xs text-neutral-400">🏮 訪問済み ・ ⭐ 行きたい ・ 📍 現在地</p>
+          {isOnline ? (
+            <>
+              <div className="h-[55vh] overflow-hidden rounded-2xl">
+                <MapContainer center={center} zoom={13} scrollWheelZoom className="h-full w-full">
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <RecenterOnLocation location={currentLocation} />
+                  {currentLocation && (
+                    <Marker
+                      position={[currentLocation.lat, currentLocation.lng]}
+                      icon={currentLocationIcon}
+                    >
+                      <Popup>現在地</Popup>
+                    </Marker>
+                  )}
+                  {sorted.map((venue) => (
+                    <Marker
+                      key={venue.id}
+                      position={[venue.location.lat, venue.location.lng]}
+                      icon={venue.is_wished ? wishedIcon : visitedIcon}
+                    >
+                      <Popup>
+                        <p className="font-semibold text-neutral-900">
+                          {venue.name || "店名未設定"}
+                        </p>
+                        <Link href={`/venues/${venue.id}`} className="text-amber-600 underline">
+                          店舗詳細を見る
+                        </Link>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
+              </div>
+              <p className="text-xs text-neutral-400">🏮 訪問済み ・ ⭐ 行きたい ・ 📍 現在地</p>
+            </>
+          ) : (
+            <div className="flex h-40 flex-col items-center justify-center gap-1 rounded-2xl bg-neutral-900 px-4 text-center">
+              <p className="text-sm text-neutral-300">📡 オフラインのため地図画像は表示できません</p>
+              <p className="text-xs text-neutral-500">下の一覧は引き続き使えます</p>
+            </div>
+          )}
 
           {sorted.length === 0 ? (
             <p className="text-sm text-neutral-400">この条件に一致する店舗がありません。</p>

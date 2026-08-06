@@ -90,6 +90,14 @@ export function useWishedVenues() {
   }, []);
 }
 
+// BottomNavの「統計」タブに件数バッジを出すための軽量カウント。
+export function useCompletedVisitCount() {
+  return useLiveQuery(
+    () => localDb.visits.toArray().then((visits) => visits.filter((v) => v.is_completed).length),
+    []
+  );
+}
+
 // 「最後の同期からn件未送信」をホーム画面に出すためのカウント。sync失敗が
 // 完全にサイレントにならないよう、ユーザー自身がここで気づけるようにする。
 export function usePendingSyncCount() {

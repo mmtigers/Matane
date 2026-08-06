@@ -1,17 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ALCOHOL_ICONS, ALCOHOL_OPTIONS, type AlcoholTag } from "@/constants/choices";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SkeletonList } from "@/components/Skeleton";
 import { estimateAverageBudget } from "@/lib/budget";
 import { deleteVisit } from "@/lib/db/checkin";
 import { useTimelineVisits, type VisitWithVenue } from "@/lib/db/queries";
+import { SAVED_TOAST_KEY } from "@/lib/sessionFlags";
 import { formatMonthLabel, monthKey } from "@/lib/time";
 
 const ALCOHOL_FILTERS = ALCOHOL_OPTIONS.map((tag) => ({ tag, icon: ALCOHOL_ICONS[tag] }));
 
 const MONTHS_PER_PAGE = 6;
+const FILTER_STORAGE_KEY = "matane:timelineFilter";
+const SAVED_TOAST_VALID_MS = 5000;
+const SAVED_TOAST_VISIBLE_MS = 2000;
 
 interface MonthGroup {
   key: string;
@@ -38,9 +43,47 @@ function groupByMonth(visits: VisitWithVenue[]): MonthGroup[] {
 
 export default function TimelinePage() {
   const visits = useTimelineVisits();
+  // 直前に選んでいたお酒フィルターをセッション内で覚えておき、画面を出入りするたびに
+  // 選び直さなくて済むようにする(端末再起動やタブを閉じれば自然にリセットされる)。
+  // sessionStorageはSSR側で読めないため、初期値はSSRと揃えてnullにし、マウント後の
+  // effectで復元する(hydrationミスマッチを避けるため)。
   const [activeTag, setActiveTag] = useState<AlcoholTag | null>(null);
   const [visibleMonthCount, setVisibleMonthCount] = useState(MONTHS_PER_PAGE);
   const [deleteTarget, setDeleteTarget] = useState<VisitWithVenue | null>(null);
+  // 二次登録画面の保存直後の遷移でだけ「保存しました」を一瞬表示する(同様の理由でfalse始まり)。
+  const [savedToast, setSavedToast] = useState(false);
+
+  useEffect(() => {
+    const stored = window.sessionStorage.getItem(FILTER_STORAGE_KEY);
+    if ((ALCOHOL_OPTIONS as readonly string[]).includes(stored ?? "")) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorageの値はSSR時点で読めないため、マウント後に一度だけ反映する
+      setActiveTag(stored as AlcoholTag);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTag) {
+      window.sessionStorage.setItem(FILTER_STORAGE_KEY, activeTag);
+    } else {
+      window.sessionStorage.removeItem(FILTER_STORAGE_KEY);
+    }
+  }, [activeTag]);
+
+  useEffect(() => {
+    const raw = window.sessionStorage.getItem(SAVED_TOAST_KEY);
+    if (!raw) return;
+    window.sessionStorage.removeItem(SAVED_TOAST_KEY);
+    if (Date.now() - Number(raw) < SAVED_TOAST_VALID_MS) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorageの値はSSR時点で読めないため、マウント後に一度だけ反映する
+      setSavedToast(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!savedToast) return;
+    const timer = setTimeout(() => setSavedToast(false), SAVED_TOAST_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [savedToast]);
 
   const filtered = useMemo(() => {
     if (!visits) return [];
@@ -82,7 +125,7 @@ export default function TimelinePage() {
       </div>
 
       {!visits ? (
-        <p className="text-sm text-neutral-400">読み込み中...</p>
+        <SkeletonList />
       ) : monthGroups.length === 0 ? (
         <p className="text-sm text-neutral-400">まだ訪問記録がありません。</p>
       ) : (
@@ -172,6 +215,12 @@ export default function TimelinePage() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {savedToast && (
+        <div className="fixed inset-x-4 bottom-24 z-50 rounded-xl bg-neutral-800 px-4 py-3 text-center text-sm shadow-lg">
+          保存しました
+        </div>
+      )}
     </main>
   );
 }

@@ -8,7 +8,9 @@ import {
   createCheckInByVenueName,
   createCheckInForVenue,
   createInstantCheckIn,
+  createWishOnlyVenue,
   scheduleBackgroundSync,
+  toggleVenueWish,
   undoCheckIn,
 } from "@/lib/db/checkin";
 import type { LocalVenue } from "@/lib/db/localDb";
@@ -18,6 +20,7 @@ import type { LatLng } from "@/types/models";
 import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
 
 const VENUE_NAME_MAX_LENGTH = 100;
+const NAV_GUIDE_STORAGE_KEY = "matane:seenNavGuide";
 
 export default function HomePage() {
   const [checkingIn, setCheckingIn] = useState(false);
@@ -31,10 +34,27 @@ export default function HomePage() {
   const [selectedPlace, setSelectedPlace] = useState<PlaceCandidate | null>(null);
   const [placeCandidates, setPlaceCandidates] = useState<PlaceCandidate[]>([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);
+  const [wishSavedMessage, setWishSavedMessage] = useState<string | null>(null);
+  // 初回起動時だけ、増えたタブ(⭐📊🗺️)の意味を軽く案内する。localStorageはSSR側で
+  // 読めないため、初期値はSSRと揃えてfalseにし、マウント後のeffectで反映する
+  // (hydrationミスマッチを避けるため)。
+  const [showNavGuide, setShowNavGuide] = useState(false);
   const router = useRouter();
 
   const incompleteVisits = useIncompleteVisits();
   const suggestion = useSuggestedVenue();
+
+  useEffect(() => {
+    if (!window.localStorage.getItem(NAV_GUIDE_STORAGE_KEY)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorageの値はSSR時点で読めないため、マウント後に一度だけ反映する
+      setShowNavGuide(true);
+    }
+  }, []);
+
+  function dismissNavGuide() {
+    window.localStorage.setItem(NAV_GUIDE_STORAGE_KEY, "1");
+    setShowNavGuide(false);
+  }
 
   useEffect(() => {
     if (!undoVisitId) return;
@@ -44,6 +64,12 @@ export default function HomePage() {
     }, 5000);
     return () => clearTimeout(timer);
   }, [undoVisitId]);
+
+  useEffect(() => {
+    if (!wishSavedMessage) return;
+    const timer = setTimeout(() => setWishSavedMessage(null), 3000);
+    return () => clearTimeout(timer);
+  }, [wishSavedMessage]);
 
   useEffect(() => {
     let active = true;
@@ -122,12 +148,52 @@ export default function HomePage() {
     router.push(`/visits/${visitId}/register`);
   }
 
+  // 検索結果一覧から、チェックインせずにその場で「行きたい」の状態だけ切り替える。
+  async function handleToggleSearchResultWish(venue: LocalVenue) {
+    const nextWished = !venue.is_wished;
+    await toggleVenueWish(venue.id, nextWished);
+    setSearchResults((current) =>
+      current.map((v) => (v.id === venue.id ? { ...v, is_wished: nextWished } : v))
+    );
+  }
+
+  // まだ行ったことのない店(友人に勧められた等)を、チェックインを経由せず直接
+  // 行きたいリストへ追加するための入口。
+  async function handleSaveAsWish(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await createWishOnlyVenue(trimmed);
+    setWishSavedMessage(`「${trimmed}」を行きたいリストに追加しました`);
+    setSearchQuery("");
+  }
+
   return (
     <main className="mx-auto flex max-w-md flex-col gap-8 px-4 pt-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-lg font-bold">Matane</h1>
         <AuthStatus />
       </header>
+
+      {showNavGuide && (
+        <section className="flex flex-col gap-2 rounded-2xl bg-neutral-900 p-4 text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold text-amber-300">新しいタブができました</p>
+            <button
+              type="button"
+              onClick={dismissNavGuide}
+              aria-label="閉じる"
+              className="text-neutral-500 focus:ring-2 focus:ring-amber-400"
+            >
+              ✕
+            </button>
+          </div>
+          <ul className="flex flex-col gap-1 text-xs text-neutral-400">
+            <li>⭐ 行きたい: 気になる店を保存しておける場所</li>
+            <li>📊 統計: 訪問回数やよく飲むお酒などの振り返り</li>
+            <li>🗺️ マップ: 訪問済み・行きたい店を地図で確認</li>
+          </ul>
+        </section>
+      )}
 
       {errorMessage && (
         <p className="rounded-xl bg-red-950 px-4 py-3 text-sm text-red-300">{errorMessage}</p>
@@ -187,12 +253,12 @@ export default function HomePage() {
         {searchQuery.trim() && (
           <ul className="flex flex-col gap-2">
             {searchResults.map((venue) => (
-              <li key={venue.id}>
+              <li key={venue.id} className="flex items-center gap-2">
                 <button
                   type="button"
                   data-venue-id={venue.id}
                   onClick={() => goToRegisterForVenueId(venue.id)}
-                  className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-left focus:ring-2 focus:ring-amber-400"
+                  className="flex-1 rounded-xl bg-neutral-900 px-4 py-3 text-left focus:ring-2 focus:ring-amber-400"
                 >
                   {venue.name}
                   {venue.nearest_station && (
@@ -201,19 +267,42 @@ export default function HomePage() {
                     </span>
                   )}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleSearchResultWish(venue)}
+                  aria-label={venue.is_wished ? "行きたいリストから外す" : "行きたいリストに追加"}
+                  aria-pressed={venue.is_wished}
+                  className={`flex h-11 w-11 flex-none items-center justify-center rounded-full text-lg focus:ring-2 focus:ring-amber-400 ${
+                    venue.is_wished
+                      ? "bg-amber-400/20 text-amber-300"
+                      : "bg-neutral-900 text-neutral-500"
+                  }`}
+                >
+                  {venue.is_wished ? "⭐" : "☆"}
+                </button>
               </li>
             ))}
-            <li>
+            <li className="flex gap-2">
               <button
                 type="button"
                 onClick={() => goToRegisterForNewName(searchQuery.trim())}
-                className="w-full rounded-xl border border-dashed border-neutral-700 px-4 py-3 text-left text-neutral-400 focus:ring-2 focus:ring-amber-400"
+                className="flex-1 rounded-xl border border-dashed border-neutral-700 px-4 py-3 text-left text-neutral-400 focus:ring-2 focus:ring-amber-400"
               >
                 「{searchQuery.trim()}」で新規チェックイン
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveAsWish(searchQuery)}
+                className="flex-none rounded-xl border border-dashed border-neutral-700 px-3 py-3 text-xs font-semibold text-amber-300 focus:ring-2 focus:ring-amber-400"
+              >
+                ☆ 行きたいに保存
               </button>
             </li>
           </ul>
         )}
+        <p className="text-xs text-neutral-500">
+          まだ行ったことのない店は「☆ 行きたいに保存」からチェックインせずに登録できます。
+        </p>
       </section>
 
       {suggestion?.venue && (
@@ -320,6 +409,12 @@ export default function HomePage() {
           >
             取り消す
           </button>
+        </div>
+      )}
+
+      {wishSavedMessage && (
+        <div className="fixed inset-x-4 bottom-24 z-50 rounded-xl bg-neutral-800 px-4 py-3 text-center text-sm shadow-lg">
+          {wishSavedMessage}
         </div>
       )}
     </main>
