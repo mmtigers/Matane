@@ -5,8 +5,8 @@ import L from "leaflet";
 import Link from "next/link";
 import { useMemo } from "react";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
-import { localDb, type LocalVenue } from "@/lib/db/localDb";
-import { useLiveQuery } from "dexie-react-hooks";
+import type { LocalVenue } from "@/lib/db/localDb";
+import { useMapVenues } from "@/lib/db/queries";
 import type { LatLng } from "@/types/models";
 
 // 東京駅。位置情報を持つ店舗が1件も無い場合のフォールバック中心座標。
@@ -29,7 +29,7 @@ const wishedIcon = createEmojiIcon("⭐");
 type LocatedVenue = LocalVenue & { location: LatLng };
 
 export default function MapClient() {
-  const venues = useLiveQuery(() => localDb.venues.toArray(), []);
+  const venues = useMapVenues();
 
   const located = useMemo<LocatedVenue[]>(
     () => (venues ?? []).filter((venue): venue is LocatedVenue => venue.location !== null),

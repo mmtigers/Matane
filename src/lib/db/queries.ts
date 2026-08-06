@@ -90,6 +90,17 @@ export function useWishedVenues() {
   }, []);
 }
 
+// マップ画面用: 位置情報を持つ店舗のうち、タイムラインから訪問記録が全て削除された
+// (=どのVisitからも参照されなくなった)店舗はマーカーとして表示しない。ただし
+// 「行きたい」店は訪問記録がなくても表示対象に含める。
+export function useMapVenues() {
+  return useLiveQuery(async () => {
+    const [venues, visits] = await Promise.all([localDb.venues.toArray(), localDb.visits.toArray()]);
+    const venueIdsWithVisits = new Set(visits.map((visit) => visit.venue_id));
+    return venues.filter((venue) => venue.is_wished || venueIdsWithVisits.has(venue.id));
+  }, []);
+}
+
 // 「最後の同期からn件未送信」をホーム画面に出すためのカウント。sync失敗が
 // 完全にサイレントにならないよう、ユーザー自身がここで気づけるようにする。
 export function usePendingSyncCount() {
