@@ -14,7 +14,7 @@ import {
   undoCheckIn,
 } from "@/lib/db/checkin";
 import type { LocalVenue } from "@/lib/db/localDb";
-import { searchVenuesLocal, useIncompleteVisits, useSuggestedVenue } from "@/lib/db/queries";
+import { searchVenuesLocal, useSuggestedVenue } from "@/lib/db/queries";
 import { getCurrentLocation } from "@/lib/geo";
 import type { LatLng } from "@/types/models";
 import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
@@ -45,7 +45,6 @@ export default function HomePage() {
   const [showNavGuide, setShowNavGuide] = useState(false);
   const router = useRouter();
 
-  const incompleteVisits = useIncompleteVisits();
   const suggestion = useSuggestedVenue();
 
   useEffect(() => {
@@ -250,27 +249,6 @@ export default function HomePage() {
           )}
         </button>
       </section>
-
-      {incompleteVisits && incompleteVisits.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-amber-600">⚠️ 登録待ち</h2>
-          <ul className="flex flex-col gap-2">
-            {incompleteVisits.map((visit) => (
-              <li key={visit.id}>
-                <Link
-                  href={`/visits/${visit.id}/register`}
-                  className="flex items-center justify-between rounded-xl bg-neutral-100 px-4 py-3 focus:ring-2 focus:ring-amber-400"
-                >
-                  <span>{visit.venue?.name || "店名未設定"}</span>
-                  <span className="text-xs text-neutral-600">
-                    {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       <section className="flex flex-col gap-2">
         <label className="text-sm font-medium text-neutral-600" htmlFor="venue-search">
