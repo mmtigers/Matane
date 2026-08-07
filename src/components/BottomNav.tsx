@@ -6,10 +6,10 @@ import { useCompletedVisitCount, useWishedVenues } from "@/lib/db/queries";
 
 const items = [
   { href: "/", label: "ホーム", icon: "🏠" },
-  { href: "/timeline", label: "タイムライン", icon: "📅" },
-  { href: "/wishlist", label: "行きたい", icon: "⭐" },
-  { href: "/stats", label: "統計", icon: "📊" },
-  { href: "/map", label: "マップ", icon: "🗺️" },
+  { href: "/timeline", label: "あしあと", icon: "📅" },
+  { href: "/wishlist", label: "気になる", icon: "⭐" },
+  { href: "/stats", label: "わたしデータ", icon: "📊" },
+  { href: "/map", label: "ちかく", icon: "🗺️" },
 ] as const;
 
 function NavBadge({ count }: { count: number }) {

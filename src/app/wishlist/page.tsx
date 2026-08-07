@@ -33,14 +33,14 @@ export default function WishlistPage() {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
       <header>
-        <h1 className="text-lg font-bold">行きたい店</h1>
+        <h1 className="text-lg font-bold">気になる店</h1>
       </header>
 
       {!venues ? (
         <SkeletonList />
       ) : venues.length === 0 ? (
         <p className="text-sm text-neutral-600">
-          店舗詳細画面の☆ボタンや、ホーム画面の検索から「行きたい店」に追加できます。
+          店舗詳細画面の☆ボタンや、ホーム画面の検索から「気になる店」に追加できます。
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -60,7 +60,7 @@ export default function WishlistPage() {
               <button
                 type="button"
                 onClick={() => handleRemove(venue)}
-                aria-label="行きたいリストから外す"
+                aria-label="気になるリストから外す"
                 className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-lg text-amber-600 focus:ring-2 focus:ring-amber-400 active:bg-neutral-200"
               >
                 ⭐
@@ -73,7 +73,7 @@ export default function WishlistPage() {
       {undoVenue && (
         <div className="fixed inset-x-4 bottom-24 z-50 flex items-center justify-between rounded-xl bg-neutral-200 px-4 py-3 shadow-lg">
           <span className="text-sm">
-            {undoVenue.name || "この店"}を行きたいから外しました
+            {undoVenue.name || "この店"}を気になるから外しました
           </span>
           <button
             type="button"
