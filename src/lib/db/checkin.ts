@@ -244,6 +244,50 @@ export async function deleteVisit(visitId: string) {
   }
 }
 
+// deleteVisitの5秒アンドゥ用。既に削除済みのVisitをそのまま書き戻す。deleteVisitが
+// 積んだ削除キューも取り消し、undo後に同期サイクルがクラウド側を誤って消さないようにする
+// (キューへの追加後・実際の同期実行前のタイミングであれば確実に取り消せる。ごく稀に
+// アンドゥ猶予中に同期が完了しクラウド側が先に消えてしまうケースはundoCheckIn同様に許容する)。
+export async function restoreVisit(visit: LocalVisit) {
+  const alreadyExists = await localDb.visits.get(visit.id);
+  if (alreadyExists) return;
+
+  const {
+    id,
+    venue_id,
+    visited_at,
+    is_completed,
+    who,
+    revisit,
+    budget,
+    alcohol_tags,
+    quietness,
+    best_photo,
+    memo,
+    ai_tags,
+    syncStatus,
+  } = visit;
+  await localDb.visits.add({
+    id,
+    venue_id,
+    visited_at,
+    is_completed,
+    who,
+    revisit,
+    budget,
+    alcohol_tags,
+    quietness,
+    best_photo,
+    memo,
+    ai_tags,
+    syncStatus,
+  });
+
+  if (syncStatus === "synced") {
+    await localDb.pendingVisitDeletes.delete(id);
+  }
+}
+
 // 店舗詳細画面の「行きたい」トグル用。
 export async function toggleVenueWish(venueId: string, isWished: boolean) {
   await localDb.venues.update(venueId, { is_wished: isWished, syncStatus: "pending" });

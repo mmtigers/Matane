@@ -60,7 +60,10 @@ export default function MapClient() {
     const completedVenueIds = new Set(
       visits.filter((visit) => visit.is_completed).map((visit) => visit.venue_id)
     );
-    return { venues, completedVenueIds };
+    // タイムラインから削除されてVisitが0件になったVenueは、行きたい登録もなければ
+    // 地図に出す意味が無い(訪問済みマーカーとして残り続けてしまうバグの原因だった)。
+    const visitedVenueIds = new Set(visits.map((visit) => visit.venue_id));
+    return { venues, completedVenueIds, visitedVenueIds };
   }, []);
 
   // 直前に選んでいた絞り込みをセッション内で覚えておく(タブを出入りするたびに
@@ -79,10 +82,13 @@ export default function MapClient() {
     window.sessionStorage.setItem(MAP_FILTER_STORAGE_KEY, filter);
   }, [filter]);
 
-  const located = useMemo<LocatedVenue[]>(
-    () => (data?.venues ?? []).filter((venue): venue is LocatedVenue => venue.location !== null),
-    [data]
-  );
+  const located = useMemo<LocatedVenue[]>(() => {
+    const visitedVenueIds = data?.visitedVenueIds ?? new Set<string>();
+    return (data?.venues ?? []).filter(
+      (venue): venue is LocatedVenue =>
+        venue.location !== null && (visitedVenueIds.has(venue.id) || venue.is_wished)
+    );
+  }, [data]);
 
   const filtered = useMemo(() => {
     const completedVenueIds = data?.completedVenueIds ?? new Set<string>();
@@ -144,7 +150,7 @@ export default function MapClient() {
       </header>
 
       {located.length === 0 ? (
-        <p className="text-sm text-neutral-400">位置情報を持つ店舗の記録がまだありません。</p>
+        <p className="text-sm text-neutral-600">位置情報を持つ店舗の記録がまだありません。</p>
       ) : (
         <>
           <div className="flex gap-2">
@@ -157,7 +163,7 @@ export default function MapClient() {
                 className={`flex-1 rounded-full px-3 py-2 text-sm font-medium transition-colors focus:ring-2 focus:ring-amber-400 ${
                   filter === item.key
                     ? "bg-amber-400 text-black"
-                    : "bg-neutral-900 text-neutral-300 active:bg-neutral-800"
+                    : "bg-neutral-100 text-neutral-700 active:bg-neutral-200"
                 }`}
               >
                 {item.icon} {item.label}
@@ -169,7 +175,7 @@ export default function MapClient() {
             type="button"
             onClick={handleLocate}
             disabled={locating}
-            className="self-start rounded-full bg-neutral-900 px-4 py-2 text-sm font-semibold text-amber-300 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+            className="self-start rounded-full bg-neutral-100 px-4 py-2 text-sm font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
           >
             {locating
               ? "取得中..."
@@ -177,7 +183,7 @@ export default function MapClient() {
                 ? "📍 現在地を更新"
                 : "📍 現在地から近い順に並べる"}
           </button>
-          {locationError && <p className="text-xs text-red-300">{locationError}</p>}
+          {locationError && <p className="text-xs text-red-600">{locationError}</p>}
 
           {isOnline ? (
             <>
@@ -214,24 +220,24 @@ export default function MapClient() {
                   ))}
                 </MapContainer>
               </div>
-              <p className="text-xs text-neutral-400">🏮 訪問済み ・ ⭐ 行きたい ・ 📍 現在地</p>
+              <p className="text-xs text-neutral-600">🏮 訪問済み ・ ⭐ 行きたい ・ 📍 現在地</p>
             </>
           ) : (
-            <div className="flex h-40 flex-col items-center justify-center gap-1 rounded-2xl bg-neutral-900 px-4 text-center">
-              <p className="text-sm text-neutral-300">📡 オフラインのため地図画像は表示できません</p>
+            <div className="flex h-40 flex-col items-center justify-center gap-1 rounded-2xl bg-neutral-100 px-4 text-center">
+              <p className="text-sm text-neutral-700">📡 オフラインのため地図画像は表示できません</p>
               <p className="text-xs text-neutral-500">下の一覧は引き続き使えます</p>
             </div>
           )}
 
           {sorted.length === 0 ? (
-            <p className="text-sm text-neutral-400">この条件に一致する店舗がありません。</p>
+            <p className="text-sm text-neutral-600">この条件に一致する店舗がありません。</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {sorted.map((venue) => (
                 <li key={venue.id}>
                   <Link
                     href={`/venues/${venue.id}`}
-                    className="flex items-center justify-between gap-2 rounded-xl bg-neutral-900 px-4 py-3 focus:ring-2 focus:ring-amber-400"
+                    className="flex items-center justify-between gap-2 rounded-xl bg-neutral-100 px-4 py-3 focus:ring-2 focus:ring-amber-400"
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="flex-none">{venue.is_wished ? "⭐" : "🏮"}</span>
@@ -240,7 +246,7 @@ export default function MapClient() {
                       </span>
                     </span>
                     {currentLocation && (
-                      <span className="flex-none text-xs text-neutral-400">
+                      <span className="flex-none text-xs text-neutral-600">
                         {formatDistance(distanceMeters(currentLocation, venue.location))}
                       </span>
                     )}

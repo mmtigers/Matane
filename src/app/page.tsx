@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { AuthStatus } from "@/components/AuthStatus";
 import {
   createCheckInByVenueName,
@@ -21,6 +21,9 @@ import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
 
 const VENUE_NAME_MAX_LENGTH = 100;
 const NAV_GUIDE_STORAGE_KEY = "matane:seenNavGuide";
+// 候補リストはmax-h-60(スクロール)で折りたたんでおり、この件数を超えると
+// スクロールしないと見えなくなる。残り件数の目安表示に使う。
+const VISIBLE_CANDIDATE_COUNT = 5;
 
 export default function HomePage() {
   const [checkingIn, setCheckingIn] = useState(false);
@@ -34,6 +37,7 @@ export default function HomePage() {
   const [selectedPlace, setSelectedPlace] = useState<PlaceCandidate | null>(null);
   const [placeCandidates, setPlaceCandidates] = useState<PlaceCandidate[]>([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);
+  const [locatingForPrompt, setLocatingForPrompt] = useState(false);
   const [wishSavedMessage, setWishSavedMessage] = useState<string | null>(null);
   // 初回起動時だけ、増えたタブ(⭐📊🗺️)の意味を軽く案内する。localStorageはSSR側で
   // 読めないため、初期値はSSRと揃えてfalseにし、マウント後のeffectで反映する
@@ -81,27 +85,32 @@ export default function HomePage() {
     };
   }, [searchQuery]);
 
-  async function openNamePrompt() {
+  // 位置情報の取得を待たずにダイアログを即表示することで、体感の待ち時間を縮める
+  // (以前は取得完了までダイアログ自体が出ず、無反応に見えていた)。GPSは店内など
+  // 電波の弱い場所だと数秒かかることがあるため、直近のキャッシュがあれば再利用する。
+  function openNamePrompt() {
     setErrorMessage(null);
-    setCheckingIn(true);
-    try {
-      const location = await getCurrentLocation();
-      setPendingLocation(location);
-      setInstantNameInput("");
-      setSelectedPlace(null);
-      setPlaceCandidates([]);
-      setShowNamePrompt(true);
+    setPendingLocation(null);
+    setInstantNameInput("");
+    setSelectedPlace(null);
+    setPlaceCandidates([]);
+    setShowNamePrompt(true);
+    setLocatingForPrompt(true);
 
-      setLoadingPlaces(true);
-      searchNearbyVenues(location)
-        .then(setPlaceCandidates)
-        .finally(() => setLoadingPlaces(false));
-    } catch (error) {
-      console.error(error);
-      setErrorMessage("位置情報を取得できませんでした。設定をご確認ください。");
-    } finally {
-      setCheckingIn(false);
-    }
+    getCurrentLocation({ maximumAge: 30000 })
+      .then((location) => {
+        setPendingLocation(location);
+        setLoadingPlaces(true);
+        searchNearbyVenues(location)
+          .then(setPlaceCandidates)
+          .finally(() => setLoadingPlaces(false));
+      })
+      .catch((error) => {
+        console.error(error);
+        setShowNamePrompt(false);
+        setErrorMessage("位置情報を取得できませんでした。設定をご確認ください。");
+      })
+      .finally(() => setLocatingForPrompt(false));
   }
 
   function handleSelectPlace(place: PlaceCandidate) {
@@ -148,6 +157,22 @@ export default function HomePage() {
     router.push(`/visits/${visitId}/register`);
   }
 
+  // Enterキーで一番上の検索結果へ即進める(候補が無ければ新規チェックイン扱い)。
+  // クリック操作しか受け付けなかったため、キーボード中心の操作を早くする。
+  // isComposingのチェックが無いと、日本語IMEで漢字変換を確定するEnterにも反応し、
+  // 変換途中の文字列でチェックインが走ってしまう。
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+    event.preventDefault();
+    if (searchResults.length > 0) {
+      goToRegisterForVenueId(searchResults[0].id);
+    } else {
+      goToRegisterForNewName(trimmed);
+    }
+  }
+
   // 検索結果一覧から、チェックインせずにその場で「行きたい」の状態だけ切り替える。
   async function handleToggleSearchResultWish(venue: LocalVenue) {
     const nextWished = !venue.is_wished;
@@ -170,14 +195,23 @@ export default function HomePage() {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-8 px-4 pt-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-lg font-bold">Matane</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold">Matane</h1>
+          <Link
+            href="/settings"
+            aria-label="設定"
+            className="rounded-full p-1.5 text-lg text-neutral-500 focus:ring-2 focus:ring-amber-400"
+          >
+            ⚙️
+          </Link>
+        </div>
         <AuthStatus />
       </header>
 
       {showNavGuide && (
-        <section className="flex flex-col gap-2 rounded-2xl bg-neutral-900 p-4 text-sm">
+        <section className="flex flex-col gap-2 rounded-2xl bg-neutral-100 p-4 text-sm">
           <div className="flex items-start justify-between gap-2">
-            <p className="font-semibold text-amber-300">新しいタブができました</p>
+            <p className="font-semibold text-amber-600">新しいタブができました</p>
             <button
               type="button"
               onClick={dismissNavGuide}
@@ -187,7 +221,7 @@ export default function HomePage() {
               ✕
             </button>
           </div>
-          <ul className="flex flex-col gap-1 text-xs text-neutral-400">
+          <ul className="flex flex-col gap-1 text-xs text-neutral-600">
             <li>⭐ 行きたい: 気になる店を保存しておける場所</li>
             <li>📊 統計: 訪問回数やよく飲むお酒などの振り返り</li>
             <li>🗺️ マップ: 訪問済み・行きたい店を地図で確認</li>
@@ -196,7 +230,7 @@ export default function HomePage() {
       )}
 
       {errorMessage && (
-        <p className="rounded-xl bg-red-950 px-4 py-3 text-sm text-red-300">{errorMessage}</p>
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{errorMessage}</p>
       )}
 
       <section className="flex flex-col items-center gap-4 py-8">
@@ -219,16 +253,16 @@ export default function HomePage() {
 
       {incompleteVisits && incompleteVisits.length > 0 && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-amber-400">⚠️ 登録待ち</h2>
+          <h2 className="text-sm font-semibold text-amber-600">⚠️ 登録待ち</h2>
           <ul className="flex flex-col gap-2">
             {incompleteVisits.map((visit) => (
               <li key={visit.id}>
                 <Link
                   href={`/visits/${visit.id}/register`}
-                  className="flex items-center justify-between rounded-xl bg-neutral-900 px-4 py-3 focus:ring-2 focus:ring-amber-400"
+                  className="flex items-center justify-between rounded-xl bg-neutral-100 px-4 py-3 focus:ring-2 focus:ring-amber-400"
                 >
                   <span>{visit.venue?.name || "店名未設定"}</span>
-                  <span className="text-xs text-neutral-400">
+                  <span className="text-xs text-neutral-600">
                     {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
                   </span>
                 </Link>
@@ -239,16 +273,17 @@ export default function HomePage() {
       )}
 
       <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-400" htmlFor="venue-search">
+        <label className="text-sm font-medium text-neutral-600" htmlFor="venue-search">
           後から登録（店名・駅名で検索）
         </label>
         <input
           id="venue-search"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
+          onKeyDown={handleSearchKeyDown}
           placeholder="店名または駅名"
           maxLength={100}
-          className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
+          className="rounded-xl bg-neutral-100 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
         />
         {searchQuery.trim() && (
           <ul className="flex flex-col gap-2">
@@ -258,11 +293,11 @@ export default function HomePage() {
                   type="button"
                   data-venue-id={venue.id}
                   onClick={() => goToRegisterForVenueId(venue.id)}
-                  className="flex-1 rounded-xl bg-neutral-900 px-4 py-3 text-left focus:ring-2 focus:ring-amber-400"
+                  className="flex-1 rounded-xl bg-neutral-100 px-4 py-3 text-left focus:ring-2 focus:ring-amber-400"
                 >
                   {venue.name}
                   {venue.nearest_station && (
-                    <span className="ml-2 text-xs text-neutral-400">
+                    <span className="ml-2 text-xs text-neutral-600">
                       {venue.nearest_station}
                     </span>
                   )}
@@ -274,8 +309,8 @@ export default function HomePage() {
                   aria-pressed={venue.is_wished}
                   className={`flex h-11 w-11 flex-none items-center justify-center rounded-full text-lg focus:ring-2 focus:ring-amber-400 ${
                     venue.is_wished
-                      ? "bg-amber-400/20 text-amber-300"
-                      : "bg-neutral-900 text-neutral-500"
+                      ? "bg-amber-400/20 text-amber-600"
+                      : "bg-neutral-100 text-neutral-500"
                   }`}
                 >
                   {venue.is_wished ? "⭐" : "☆"}
@@ -286,14 +321,14 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => goToRegisterForNewName(searchQuery.trim())}
-                className="flex-1 rounded-xl border border-dashed border-neutral-700 px-4 py-3 text-left text-neutral-400 focus:ring-2 focus:ring-amber-400"
+                className="flex-1 rounded-xl border border-dashed border-neutral-300 px-4 py-3 text-left text-neutral-600 focus:ring-2 focus:ring-amber-400"
               >
                 「{searchQuery.trim()}」で新規チェックイン
               </button>
               <button
                 type="button"
                 onClick={() => handleSaveAsWish(searchQuery)}
-                className="flex-none rounded-xl border border-dashed border-neutral-700 px-3 py-3 text-xs font-semibold text-amber-300 focus:ring-2 focus:ring-amber-400"
+                className="flex-none rounded-xl border border-dashed border-neutral-300 px-3 py-3 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
               >
                 ☆ 行きたいに保存
               </button>
@@ -306,10 +341,10 @@ export default function HomePage() {
       </section>
 
       {suggestion?.venue && (
-        <section className="rounded-2xl bg-neutral-900 p-4">
-          <h2 className="text-sm font-semibold text-amber-400">今日どこ行く？</h2>
+        <section className="rounded-2xl bg-neutral-100 p-4">
+          <h2 className="text-sm font-semibold text-amber-600">今日どこ行く？</h2>
           <p className="mt-2 text-base font-medium">{suggestion.venue.name}</p>
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-neutral-600">
             前回: {new Date(suggestion.visited_at).toLocaleDateString("ja-JP")}
             ・しばらく行っていません
           </p>
@@ -331,36 +366,46 @@ export default function HomePage() {
           onClick={() => setShowNamePrompt(false)}
         >
           <div
-            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-900 p-5 sm:mb-0"
+            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-100 p-5 sm:mb-0"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="text-sm text-neutral-100">名前わかる？</p>
+            <p className="text-sm text-neutral-900">名前わかる？</p>
 
-            {loadingPlaces && (
-              <p className="mt-3 text-xs text-neutral-400">近くの店舗を検索中...</p>
+            {locatingForPrompt && (
+              <p className="mt-3 text-xs text-neutral-600">現在地を取得中...</p>
+            )}
+            {!locatingForPrompt && loadingPlaces && (
+              <p className="mt-3 text-xs text-neutral-600">近くの店舗を検索中...</p>
             )}
 
             {!loadingPlaces && placeCandidates.length > 0 && (
-              <ul className="mt-3 flex max-h-60 flex-col gap-1.5 overflow-y-auto">
-                {placeCandidates.map((place) => (
-                  <li key={place.placeId}>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPlace(place)}
-                      className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
-                        selectedPlace?.placeId === place.placeId
-                          ? "bg-amber-400/20 text-amber-300"
-                          : "bg-neutral-800 text-neutral-200"
-                      }`}
-                    >
-                      {place.name}
-                      {place.address && (
-                        <span className="ml-2 text-xs text-neutral-400">{place.address}</span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <p className="mt-3 text-xs text-neutral-500">
+                  近くの候補 {placeCandidates.length}件
+                  {placeCandidates.length > VISIBLE_CANDIDATE_COUNT &&
+                    `（スクロールしてあと${placeCandidates.length - VISIBLE_CANDIDATE_COUNT}件）`}
+                </p>
+                <ul className="mt-1.5 flex max-h-60 flex-col gap-1.5 overflow-y-auto">
+                  {placeCandidates.map((place) => (
+                    <li key={place.placeId}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectPlace(place)}
+                        className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
+                          selectedPlace?.placeId === place.placeId
+                            ? "bg-amber-400/20 text-amber-600"
+                            : "bg-neutral-200 text-neutral-800"
+                        }`}
+                      >
+                        {place.name}
+                        {place.address && (
+                          <span className="ml-2 text-xs text-neutral-600">{place.address}</span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
 
             <input
@@ -370,26 +415,32 @@ export default function HomePage() {
                 setSelectedPlace(null);
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !checkingIn) handleInstantCheckIn(instantNameInput);
+                if (
+                  event.key === "Enter" &&
+                  !event.nativeEvent.isComposing &&
+                  !checkingIn &&
+                  !locatingForPrompt
+                )
+                  handleInstantCheckIn(instantNameInput);
               }}
               placeholder="候補にない場合は入力(わからなければ空欄でOK)"
               maxLength={VENUE_NAME_MAX_LENGTH}
               disabled={checkingIn}
-              className="mt-3 w-full rounded-xl bg-neutral-800 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              className="mt-3 w-full rounded-xl bg-neutral-200 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
             />
             <div className="mt-4 flex gap-3">
               <button
                 type="button"
                 onClick={() => setShowNamePrompt(false)}
                 disabled={checkingIn}
-                className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+                className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
                 キャンセル
               </button>
               <button
                 type="button"
                 onClick={() => handleInstantCheckIn(instantNameInput)}
-                disabled={checkingIn}
+                disabled={checkingIn || locatingForPrompt}
                 className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
                 登録する
@@ -400,12 +451,12 @@ export default function HomePage() {
       )}
 
       {undoVisitId && (
-        <div className="fixed inset-x-4 bottom-24 z-50 flex items-center justify-between rounded-xl bg-neutral-800 px-4 py-3 shadow-lg">
+        <div className="fixed inset-x-4 bottom-24 z-50 flex items-center justify-between rounded-xl bg-neutral-200 px-4 py-3 shadow-lg">
           <span className="text-sm">チェックインしました</span>
           <button
             type="button"
             onClick={handleUndo}
-            className="text-sm font-semibold text-amber-400 focus:ring-2 focus:ring-amber-400"
+            className="text-sm font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
           >
             取り消す
           </button>
@@ -413,7 +464,7 @@ export default function HomePage() {
       )}
 
       {wishSavedMessage && (
-        <div className="fixed inset-x-4 bottom-24 z-50 rounded-xl bg-neutral-800 px-4 py-3 text-center text-sm shadow-lg">
+        <div className="fixed inset-x-4 bottom-24 z-50 rounded-xl bg-neutral-200 px-4 py-3 text-center text-sm shadow-lg">
           {wishSavedMessage}
         </div>
       )}

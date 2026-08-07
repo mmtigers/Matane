@@ -1,5 +1,5 @@
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-neutral-800 ${className}`} />;
+  return <div className={`animate-pulse rounded-lg bg-neutral-200 ${className}`} />;
 }
 
 // 各画面の読み込み中表示を統一するためのカードリスト型スケルトン。

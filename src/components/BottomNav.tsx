@@ -33,7 +33,7 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-800 bg-black/90 backdrop-blur-sm [padding-bottom:env(safe-area-inset-bottom)]">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-white/90 backdrop-blur-sm [padding-bottom:env(safe-area-inset-bottom)]">
       <ul className="mx-auto flex max-w-md">
         {items.map((item) => {
           const active = pathname === item.href;
@@ -43,7 +43,7 @@ export function BottomNav() {
               <Link
                 href={item.href}
                 className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] focus:ring-2 focus:ring-amber-400 ${
-                  active ? "text-amber-400" : "text-neutral-400"
+                  active ? "text-amber-600" : "text-neutral-500"
                 }`}
               >
                 <span className="relative text-lg leading-none">

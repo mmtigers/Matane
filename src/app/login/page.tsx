@@ -83,22 +83,22 @@ export default function LoginPage() {
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-12">
       <header>
         <h1 className="text-lg font-bold">ログイン</h1>
-        <p className="mt-1 text-sm text-neutral-400">
+        <p className="mt-1 text-sm text-neutral-600">
           メールアドレス宛にログイン用のリンクを送ります。パスワードは不要です。
         </p>
       </header>
 
       {sent ? (
-        <div className="flex flex-col gap-3 rounded-xl bg-neutral-900 p-4 text-sm text-neutral-200">
+        <div className="flex flex-col gap-3 rounded-xl bg-neutral-100 p-4 text-sm text-neutral-800">
           <p>
-            <span className="font-semibold text-amber-400">{email}</span>{" "}
+            <span className="font-semibold text-amber-600">{email}</span>{" "}
             にログインリンクを送信しました。メール内のリンクを開いてください。
           </p>
           <button
             type="button"
             onClick={() => setSent(false)}
             disabled={cooldown > 0}
-            className="self-start text-xs text-amber-400 underline underline-offset-2 focus:ring-2 focus:ring-amber-400 disabled:text-neutral-500 disabled:no-underline"
+            className="self-start text-xs text-amber-600 underline underline-offset-2 focus:ring-2 focus:ring-amber-400 disabled:text-neutral-500 disabled:no-underline"
           >
             別のメールアドレスで送り直す{cooldown > 0 && `（${cooldown}秒後）`}
           </button>
@@ -111,9 +111,9 @@ export default function LoginPage() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@example.com"
-            className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
+            className="rounded-xl bg-neutral-100 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
           />
-          {errorMessage && <p className="text-sm text-red-400">{errorMessage}</p>}
+          {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
           <button
             type="submit"
             disabled={sending || cooldown > 0}
@@ -124,7 +124,7 @@ export default function LoginPage() {
         </form>
       )}
 
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-neutral-600">
         ログインしなくてもこの端末での記録・閲覧は可能です。ログインすると他の端末ともデータが同期されます。
       </p>
     </main>

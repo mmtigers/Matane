@@ -11,8 +11,8 @@ import { googleMapsUrl, osmEmbedUrl } from "@/lib/geo";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-neutral-800 py-3 last:border-b-0">
-      <span className="text-sm text-neutral-400">{label}</span>
+    <div className="flex items-center justify-between border-b border-neutral-200 py-3 last:border-b-0">
+      <span className="text-sm text-neutral-600">{label}</span>
       <span className="text-sm font-medium">{value}</span>
     </div>
   );
@@ -49,7 +49,7 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
   if (!visit.is_completed) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 px-4 pt-8">
-        <p className="text-sm text-neutral-400">この記録はまだ登録前です。</p>
+        <p className="text-sm text-neutral-600">この記録はまだ登録前です。</p>
         <Link
           href={`/visits/${visit.id}/register`}
           className="rounded-full bg-amber-400 py-4 text-center text-base font-semibold text-black"
@@ -66,11 +66,11 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
       <header>
         {visit.venue && (
-          <Link href={`/venues/${visit.venue.id}`} className="text-lg font-bold text-amber-300">
+          <Link href={`/venues/${visit.venue.id}`} className="text-lg font-bold text-amber-600">
             {visit.venue.name || "店名未設定"}
           </Link>
         )}
-        <p className="mt-1 text-xs text-neutral-400">
+        <p className="mt-1 text-xs text-neutral-600">
           {visitDate.toLocaleDateString("ja-JP", {
             year: "numeric",
             month: "long",
@@ -89,7 +89,7 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
         />
       )}
 
-      <section className="rounded-2xl bg-neutral-900 px-4">
+      <section className="rounded-2xl bg-neutral-100 px-4">
         <DetailRow label="誰と" value={visit.who.length > 0 ? visit.who.join(" / ") : "未記録"} />
         <DetailRow label="また行きたい" value={visit.revisit ?? "未記録"} />
         <DetailRow label="予算感" value={visit.budget ?? "未記録"} />
@@ -101,15 +101,15 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
       </section>
 
       {visit.memo && (
-        <section className="rounded-2xl bg-neutral-900 p-4">
-          <h2 className="text-sm font-semibold text-neutral-400">メモ</h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-200">{visit.memo}</p>
+        <section className="rounded-2xl bg-neutral-100 p-4">
+          <h2 className="text-sm font-semibold text-neutral-600">メモ</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-800">{visit.memo}</p>
         </section>
       )}
 
       {visit.venue?.location && (
-        <section className="flex flex-col gap-2 rounded-2xl bg-neutral-900 p-4">
-          <h2 className="text-sm font-semibold text-neutral-400">📍 チェックインした場所</h2>
+        <section className="flex flex-col gap-2 rounded-2xl bg-neutral-100 p-4">
+          <h2 className="text-sm font-semibold text-neutral-600">📍 チェックインした場所</h2>
           <iframe
             title="チェックインした場所の地図"
             src={osmEmbedUrl(visit.venue.location)}
@@ -120,7 +120,7 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
             href={googleMapsUrl(visit.venue.location)}
             target="_blank"
             rel="noopener noreferrer"
-            className="self-start text-xs text-amber-400 underline underline-offset-2 focus:ring-2 focus:ring-amber-400"
+            className="self-start text-xs text-amber-600 underline underline-offset-2 focus:ring-2 focus:ring-amber-400"
           >
             Googleマップで開く
           </a>
@@ -130,7 +130,7 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
       <div className="flex gap-3">
         <Link
           href={`/visits/${visit.id}/register`}
-          className="flex-1 rounded-full bg-neutral-800 py-3 text-center text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400"
+          className="flex-1 rounded-full bg-neutral-200 py-3 text-center text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
         >
           編集する
         </Link>
@@ -138,7 +138,7 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
           type="button"
           onClick={() => setConfirmingDelete(true)}
           disabled={deleting}
-          className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-red-400 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+          className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-red-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
         >
           {deleting ? "削除中..." : "削除する"}
         </button>

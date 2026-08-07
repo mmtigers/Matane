@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
-  commuteDestinations,
+  commuteDestinations as defaultCommuteDestinations,
   getLastTrainTime,
   getMinutesUntilLastTrain,
   getPriorityDestinationId,
+  withCommuteOverrides,
 } from "@/config/commute";
 import { Skeleton } from "@/components/Skeleton";
+import { loadCommuteOverrides } from "@/lib/commuteSettings";
 import { duplicateVisit, toggleVenueWish } from "@/lib/db/checkin";
 import { useVenue, useVisitsForVenue } from "@/lib/db/queries";
 import { googleMapsUrl } from "@/lib/geo";
@@ -21,6 +23,18 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
   const [checkingIn, setCheckingIn] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [shareCopied, setShareCopied] = useState(false);
+  // 設定画面での上書きはlocalStorageに保存されておりSSR時点では読めないため、
+  // 初期値は環境変数由来のデフォルトのままにし、マウント後のeffectで反映する
+  // (hydrationミスマッチを避けるため)。
+  const [destinations, setDestinations] = useState(defaultCommuteDestinations);
+
+  useEffect(() => {
+    const overrides = loadCommuteOverrides();
+    if (overrides) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorageの値はSSR時点で読めないため、マウント後に一度だけ反映する
+      setDestinations(withCommuteOverrides(defaultCommuteDestinations, overrides));
+    }
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000);
@@ -85,9 +99,9 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
         <div>
           <h1 className="text-lg font-bold">{venue.name || "店名未設定"}</h1>
           {venue.nearest_station && (
-            <p className="text-xs text-neutral-400">最寄り駅: {venue.nearest_station}</p>
+            <p className="text-xs text-neutral-600">最寄り駅: {venue.nearest_station}</p>
           )}
-          {venue.address && <p className="text-xs text-neutral-400">{venue.address}</p>}
+          {venue.address && <p className="text-xs text-neutral-600">{venue.address}</p>}
         </div>
         <div className="flex flex-none flex-col items-end gap-2">
           <div className="flex gap-2">
@@ -95,7 +109,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
               type="button"
               onClick={handleShare}
               aria-label="この店を共有する"
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-900 text-xl text-neutral-300 transition-colors focus:ring-2 focus:ring-amber-400"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-100 text-xl text-neutral-700 transition-colors focus:ring-2 focus:ring-amber-400"
             >
               📤
             </button>
@@ -106,14 +120,14 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
               aria-pressed={venue.is_wished}
               className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-colors focus:ring-2 focus:ring-amber-400 ${
                 venue.is_wished
-                  ? "bg-amber-400/20 text-amber-300"
-                  : "bg-neutral-900 text-neutral-500"
+                  ? "bg-amber-400/20 text-amber-600"
+                  : "bg-neutral-100 text-neutral-500"
               }`}
             >
               {venue.is_wished ? "⭐" : "☆"}
             </button>
           </div>
-          {shareCopied && <span className="text-xs text-amber-300">コピーしました</span>}
+          {shareCopied && <span className="text-xs text-amber-600">コピーしました</span>}
         </div>
       </header>
 
@@ -129,9 +143,9 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
       )}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-neutral-400">これまでの訪問</h2>
+        <h2 className="text-sm font-semibold text-neutral-600">これまでの訪問</h2>
         {visits.length === 0 ? (
-          <p className="text-sm text-neutral-400">まだ訪問記録がありません。</p>
+          <p className="text-sm text-neutral-600">まだ訪問記録がありません。</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {visits.map((visit) => {
@@ -142,7 +156,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
                       {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
                     </span>
                     {!visit.is_completed && (
-                      <span className="text-xs text-amber-400">登録待ち</span>
+                      <span className="text-xs text-amber-600">登録待ち</span>
                     )}
                   </div>
                   {visit.best_photo && (
@@ -154,11 +168,11 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
                     />
                   )}
                   {(visit.who.length > 0 || visit.alcohol_tags.length > 0) && (
-                    <p className="mt-2 text-xs text-neutral-400">
+                    <p className="mt-2 text-xs text-neutral-600">
                       {[...visit.who, ...visit.alcohol_tags].join(" / ")}
                     </p>
                   )}
-                  {visit.memo && <p className="mt-2 text-sm text-neutral-300">{visit.memo}</p>}
+                  {visit.memo && <p className="mt-2 text-sm text-neutral-700">{visit.memo}</p>}
                 </>
               );
 
@@ -170,7 +184,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
                         ? `/visits/${visit.id}`
                         : `/visits/${visit.id}/register`
                     }
-                    className="block rounded-xl bg-neutral-900 p-4 focus:ring-2 focus:ring-amber-400"
+                    className="block rounded-xl bg-neutral-100 p-4 focus:ring-2 focus:ring-amber-400"
                   >
                     {content}
                   </Link>
@@ -181,10 +195,10 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
         )}
       </section>
 
-      <section className="flex flex-col gap-2 rounded-2xl bg-neutral-900 p-4">
-        <h2 className="text-sm font-semibold text-amber-400">🚃 終電・帰宅アラート</h2>
+      <section className="flex flex-col gap-2 rounded-2xl bg-neutral-100 p-4">
+        <h2 className="text-sm font-semibold text-amber-600">🚃 終電・帰宅アラート</h2>
         <ul className="flex flex-col gap-1">
-          {commuteDestinations.map((destination) => {
+          {destinations.map((destination) => {
             const lastTrainTime = getLastTrainTime(destination, venue.nearest_station);
             const minutesLeft = getMinutesUntilLastTrain(lastTrainTime, now);
             const missed = minutesLeft < 0;
@@ -194,10 +208,10 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
                 key={destination.id}
                 className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
                   urgent
-                    ? "bg-red-500/10 text-red-300"
+                    ? "bg-red-500/10 text-red-600"
                     : destination.id === priorityId
-                      ? "bg-amber-400/10 text-amber-300"
-                      : "text-neutral-300"
+                      ? "bg-amber-400/10 text-amber-600"
+                      : "text-neutral-700"
                 }`}
               >
                 <span>{destination.label}</span>

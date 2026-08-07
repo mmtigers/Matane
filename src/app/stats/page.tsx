@@ -11,8 +11,6 @@ import {
   overallAverageBudget,
   whoFrequency,
 } from "@/lib/stats";
-import { downloadTextFile, visitsToCsv, visitsToIcs } from "@/lib/export";
-
 type Period = "6m" | "1y" | "all";
 const PERIODS: { key: Period; label: string }[] = [
   { key: "6m", label: "6ヶ月" },
@@ -52,14 +50,6 @@ export default function StatsPage() {
     [completed]
   );
 
-  function handleExportCsv() {
-    downloadTextFile("matane-visits.csv", visitsToCsv(completed), "text/csv;charset=utf-8");
-  }
-
-  function handleExportIcs() {
-    downloadTextFile("matane-visits.ics", visitsToIcs(completed), "text/calendar;charset=utf-8");
-  }
-
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
       <header>
@@ -69,29 +59,29 @@ export default function StatsPage() {
       {!visits ? (
         <SkeletonList />
       ) : completed.length === 0 ? (
-        <p className="text-sm text-neutral-400">まだ訪問記録がありません。</p>
+        <p className="text-sm text-neutral-600">まだ訪問記録がありません。</p>
       ) : (
         <>
           <section className="grid grid-cols-3 gap-3">
-            <div className="rounded-2xl bg-neutral-900 p-4 text-center">
-              <p className="text-2xl font-bold text-amber-300">{completed.length}</p>
-              <p className="mt-1 text-xs text-neutral-400">総訪問回数</p>
+            <div className="rounded-2xl bg-neutral-100 p-4 text-center">
+              <p className="text-2xl font-bold text-amber-600">{completed.length}</p>
+              <p className="mt-1 text-xs text-neutral-600">総訪問回数</p>
             </div>
-            <div className="rounded-2xl bg-neutral-900 p-4 text-center">
-              <p className="text-2xl font-bold text-amber-300">{venueCount}</p>
-              <p className="mt-1 text-xs text-neutral-400">訪問した店舗数</p>
+            <div className="rounded-2xl bg-neutral-100 p-4 text-center">
+              <p className="text-2xl font-bold text-amber-600">{venueCount}</p>
+              <p className="mt-1 text-xs text-neutral-600">訪問した店舗数</p>
             </div>
-            <div className="rounded-2xl bg-neutral-900 p-4 text-center">
-              <p className="text-2xl font-bold text-amber-300">
+            <div className="rounded-2xl bg-neutral-100 p-4 text-center">
+              <p className="text-2xl font-bold text-amber-600">
                 {avgBudget !== null ? `¥${avgBudget.toLocaleString("ja-JP")}` : "—"}
               </p>
-              <p className="mt-1 text-xs text-neutral-400">平均予算</p>
+              <p className="mt-1 text-xs text-neutral-600">平均予算</p>
             </div>
           </section>
 
-          <section className="flex flex-col gap-3 rounded-2xl bg-neutral-900 p-4">
+          <section className="flex flex-col gap-3 rounded-2xl bg-neutral-100 p-4">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-neutral-400">月別訪問回数</h2>
+              <h2 className="text-sm font-semibold text-neutral-600">月別訪問回数</h2>
               <div className="flex gap-1">
                 {PERIODS.map((item) => (
                   <button
@@ -102,7 +92,7 @@ export default function StatsPage() {
                     className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors focus:ring-2 focus:ring-amber-400 ${
                       period === item.key
                         ? "bg-amber-400 text-black"
-                        : "bg-neutral-800 text-neutral-300"
+                        : "bg-neutral-200 text-neutral-700"
                     }`}
                   >
                     {item.label}
@@ -118,8 +108,8 @@ export default function StatsPage() {
           </section>
 
           {alcoholFreq.length > 0 && (
-            <section className="flex flex-col gap-3 rounded-2xl bg-neutral-900 p-4">
-              <h2 className="text-sm font-semibold text-neutral-400">よく飲むお酒</h2>
+            <section className="flex flex-col gap-3 rounded-2xl bg-neutral-100 p-4">
+              <h2 className="text-sm font-semibold text-neutral-600">よく飲むお酒</h2>
               <div className="flex flex-col gap-2">
                 {alcoholFreq.map((item) => (
                   <BarRow key={item.label} label={item.label} count={item.count} max={alcoholMax} />
@@ -129,8 +119,8 @@ export default function StatsPage() {
           )}
 
           {whoFreq.length > 0 && (
-            <section className="flex flex-col gap-3 rounded-2xl bg-neutral-900 p-4">
-              <h2 className="text-sm font-semibold text-neutral-400">誰と行くことが多いか</h2>
+            <section className="flex flex-col gap-3 rounded-2xl bg-neutral-100 p-4">
+              <h2 className="text-sm font-semibold text-neutral-600">誰と行くことが多いか</h2>
               <div className="flex flex-col gap-2">
                 {whoFreq.map((item) => (
                   <BarRow key={item.label} label={item.label} count={item.count} max={whoMax} />
@@ -138,26 +128,6 @@ export default function StatsPage() {
               </div>
             </section>
           )}
-
-          <section className="flex flex-col gap-3 rounded-2xl bg-neutral-900 p-4">
-            <h2 className="text-sm font-semibold text-neutral-400">エクスポート</h2>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleExportCsv}
-                className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400 active:bg-neutral-700"
-              >
-                CSVで書き出す
-              </button>
-              <button
-                type="button"
-                onClick={handleExportIcs}
-                className="flex-1 rounded-full bg-neutral-800 py-3 text-sm font-semibold text-neutral-200 focus:ring-2 focus:ring-amber-400 active:bg-neutral-700"
-              >
-                カレンダーに書き出す
-              </button>
-            </div>
-          </section>
         </>
       )}
     </main>

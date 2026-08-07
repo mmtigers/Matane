@@ -39,7 +39,7 @@ export default function WishlistPage() {
       {!venues ? (
         <SkeletonList />
       ) : venues.length === 0 ? (
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-neutral-600">
           店舗詳細画面の☆ボタンや、ホーム画面の検索から「行きたい店」に追加できます。
         </p>
       ) : (
@@ -47,12 +47,12 @@ export default function WishlistPage() {
           {venues.map((venue) => (
             <li
               key={venue.id}
-              className="flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-3"
+              className="flex items-center gap-2 rounded-xl bg-neutral-100 px-4 py-3"
             >
               <Link href={`/venues/${venue.id}`} className="flex-1 min-w-0">
                 <p className="text-sm font-medium">{venue.name || "店名未設定"}</p>
                 {(venue.nearest_station || venue.address) && (
-                  <p className="text-xs text-neutral-400">
+                  <p className="text-xs text-neutral-600">
                     {venue.nearest_station || venue.address}
                   </p>
                 )}
@@ -61,7 +61,7 @@ export default function WishlistPage() {
                 type="button"
                 onClick={() => handleRemove(venue)}
                 aria-label="行きたいリストから外す"
-                className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-lg text-amber-300 focus:ring-2 focus:ring-amber-400 active:bg-neutral-800"
+                className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-lg text-amber-600 focus:ring-2 focus:ring-amber-400 active:bg-neutral-200"
               >
                 ⭐
               </button>
@@ -71,14 +71,14 @@ export default function WishlistPage() {
       )}
 
       {undoVenue && (
-        <div className="fixed inset-x-4 bottom-24 z-50 flex items-center justify-between rounded-xl bg-neutral-800 px-4 py-3 shadow-lg">
+        <div className="fixed inset-x-4 bottom-24 z-50 flex items-center justify-between rounded-xl bg-neutral-200 px-4 py-3 shadow-lg">
           <span className="text-sm">
             {undoVenue.name || "この店"}を行きたいから外しました
           </span>
           <button
             type="button"
             onClick={handleUndo}
-            className="text-sm font-semibold text-amber-400 focus:ring-2 focus:ring-amber-400"
+            className="text-sm font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
           >
             取り消す
           </button>

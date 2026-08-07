@@ -167,18 +167,18 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
       <header>
         <h1 className="text-lg font-bold">登録</h1>
-        <p className="text-xs text-neutral-400">
+        <p className="text-xs text-neutral-600">
           {new Date(visit.visited_at).toLocaleString("ja-JP")}
         </p>
       </header>
 
       {errorMessage && (
-        <p className="rounded-xl bg-red-950 px-4 py-3 text-sm text-red-300">{errorMessage}</p>
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{errorMessage}</p>
       )}
 
       {needsVenueName && (
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-400" htmlFor="venue-name">
+          <label className="text-sm font-medium text-neutral-600" htmlFor="venue-name">
             店名（GPSのみのため入力してください）
           </label>
 
@@ -187,14 +187,14 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
               type="button"
               onClick={handleSearchNearbyPlaces}
               disabled={loadingPlaces}
-              className="self-start rounded-full bg-neutral-800 px-4 py-2 text-xs font-semibold text-amber-300 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              className="self-start rounded-full bg-neutral-200 px-4 py-2 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
             >
               {loadingPlaces ? "検索中..." : "📍 近くの店舗を候補から選ぶ"}
             </button>
           )}
 
           {!loadingPlaces && hasSearchedPlaces && placeCandidates.length === 0 && (
-            <p className="text-xs text-neutral-400">近くに候補となる店舗が見つかりませんでした。</p>
+            <p className="text-xs text-neutral-600">近くに候補となる店舗が見つかりませんでした。</p>
           )}
 
           {!loadingPlaces && placeCandidates.length > 0 && (
@@ -206,13 +206,13 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
                     onClick={() => handleSelectPlace(place)}
                     className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
                       selectedPlace?.placeId === place.placeId
-                        ? "bg-amber-400/20 text-amber-300"
-                        : "bg-neutral-900 text-neutral-200"
+                        ? "bg-amber-400/20 text-amber-600"
+                        : "bg-neutral-100 text-neutral-800"
                     }`}
                   >
                     {place.name}
                     {place.address && (
-                      <span className="ml-2 text-xs text-neutral-400">{place.address}</span>
+                      <span className="ml-2 text-xs text-neutral-600">{place.address}</span>
                     )}
                   </button>
                 </li>
@@ -229,7 +229,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
             }}
             placeholder="候補にない場合は店名を入力"
             maxLength={VENUE_NAME_MAX_LENGTH}
-            className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
+            className="rounded-xl bg-neutral-100 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
           />
         </div>
       )}
@@ -257,8 +257,8 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
       />
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-neutral-400">厳選の1枚</span>
-        <label className="flex h-40 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-700 bg-neutral-900 text-sm text-neutral-400">
+        <span className="text-sm font-medium text-neutral-600">厳選の1枚</span>
+        <label className="flex h-40 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-100 text-sm text-neutral-600">
           {compressing ? (
             "処理中..."
           ) : photoDataUrl ? (
@@ -277,7 +277,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-400" htmlFor="memo">
+        <label className="text-sm font-medium text-neutral-600" htmlFor="memo">
           自由メモ
         </label>
         <textarea
@@ -287,7 +287,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
           rows={3}
           placeholder="音声入力もおすすめです"
           maxLength={MEMO_MAX_LENGTH}
-          className="rounded-xl bg-neutral-900 px-4 py-3 text-base outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-amber-400"
+          className="rounded-xl bg-neutral-100 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
         />
       </div>
 

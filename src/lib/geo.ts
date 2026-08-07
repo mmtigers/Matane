@@ -27,7 +27,10 @@ export function formatDistance(meters: number): string {
   return `${(meters / 1000).toFixed(1)}km`;
 }
 
-export function getCurrentLocation(): Promise<LatLng> {
+// maximumAgeを指定すると、その時間内に取得済みの位置情報があればGPSの再測位を待たずに
+// 即座に返す(飲食店の店内などGPS信号が弱い場所では新規測位に数秒〜タイムアウトまで
+// かかることがあるため、瞬録のように連続してタップされ得る操作では有効)。
+export function getCurrentLocation(options?: { maximumAge?: number }): Promise<LatLng> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       reject(new Error("この端末では位置情報を利用できません"));
@@ -42,7 +45,7 @@ export function getCurrentLocation(): Promise<LatLng> {
         });
       },
       (error) => reject(error),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: options?.maximumAge ?? 0 }
     );
   });
 }

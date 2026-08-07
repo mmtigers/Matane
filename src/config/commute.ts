@@ -25,6 +25,24 @@ export const commuteDestinations: CommuteDestination[] = [
   },
 ];
 
+// 設定画面で保存されたユーザー上書き(表示名・終電時刻)をデフォルト値にマージする。
+// 上書きが無い/空文字のフィールドは環境変数由来のデフォルトのまま残す。
+export function withCommuteOverrides(
+  base: CommuteDestination[],
+  overrides: Record<string, { label: string; lastTrain: string }> | null
+): CommuteDestination[] {
+  if (!overrides) return base;
+  return base.map((destination) => {
+    const override = overrides[destination.id];
+    if (!override) return destination;
+    return {
+      ...destination,
+      label: override.label.trim() || destination.label,
+      defaultLastTrain: override.lastTrain.trim() || destination.defaultLastTrain,
+    };
+  });
+}
+
 // 週末は自宅、平日は赴任先を優先表示する（PRD 5章「曜日による優先度」）。
 export function getPriorityDestinationId(date: Date): string {
   const day = date.getDay();
