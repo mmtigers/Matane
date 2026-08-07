@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { AuthStatus } from "@/components/AuthStatus";
+import { PlaceCandidateList } from "@/components/PlaceCandidateList";
 import {
   createCheckInByVenueName,
   createCheckInForVenue,
@@ -21,9 +22,6 @@ import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
 
 const VENUE_NAME_MAX_LENGTH = 100;
 const NAV_GUIDE_STORAGE_KEY = "matane:seenNavGuide";
-// 候補リストはmax-h-60(スクロール)で折りたたんでおり、この件数を超えると
-// スクロールしないと見えなくなる。残り件数の目安表示に使う。
-const VISIBLE_CANDIDATE_COUNT = 5;
 
 export default function HomePage() {
   const [checkingIn, setCheckingIn] = useState(false);
@@ -379,33 +377,11 @@ export default function HomePage() {
             )}
 
             {!loadingPlaces && placeCandidates.length > 0 && (
-              <>
-                <p className="mt-3 text-xs text-neutral-500">
-                  近くの候補 {placeCandidates.length}件
-                  {placeCandidates.length > VISIBLE_CANDIDATE_COUNT &&
-                    `（スクロールしてあと${placeCandidates.length - VISIBLE_CANDIDATE_COUNT}件）`}
-                </p>
-                <ul className="mt-1.5 flex max-h-60 flex-col gap-1.5 overflow-y-auto">
-                  {placeCandidates.map((place) => (
-                    <li key={place.placeId}>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectPlace(place)}
-                        className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
-                          selectedPlace?.placeId === place.placeId
-                            ? "bg-amber-400/20 text-amber-600"
-                            : "bg-neutral-200 text-neutral-800"
-                        }`}
-                      >
-                        {place.name}
-                        {place.address && (
-                          <span className="ml-2 text-xs text-neutral-600">{place.address}</span>
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
+              <PlaceCandidateList
+                candidates={placeCandidates}
+                selectedPlaceId={selectedPlace?.placeId ?? null}
+                onSelect={handleSelectPlace}
+              />
             )}
 
             <input
