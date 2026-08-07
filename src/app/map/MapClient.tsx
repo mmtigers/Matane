@@ -38,7 +38,7 @@ type MapFilter = "all" | "visited" | "wished";
 const FILTERS: { key: MapFilter; label: string; icon: string }[] = [
   { key: "all", label: "すべて", icon: "🗂" },
   { key: "visited", label: "訪問済み", icon: "🏮" },
-  { key: "wished", label: "行きたい", icon: "⭐" },
+  { key: "wished", label: "気になる", icon: "⭐" },
 ];
 
 // currentLocationが後から変わった際にMapContainerの中心を追従させる。
@@ -146,7 +146,7 @@ export default function MapClient() {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-3 px-4 pt-6">
       <header>
-        <h1 className="text-lg font-bold">マップ</h1>
+        <h1 className="text-lg font-bold">ちかく</h1>
       </header>
 
       {located.length === 0 ? (
@@ -220,7 +220,7 @@ export default function MapClient() {
                   ))}
                 </MapContainer>
               </div>
-              <p className="text-xs text-neutral-600">🏮 訪問済み ・ ⭐ 行きたい ・ 📍 現在地</p>
+              <p className="text-xs text-neutral-600">🏮 訪問済み ・ ⭐ 気になる ・ 📍 現在地</p>
             </>
           ) : (
             <div className="flex h-40 flex-col items-center justify-center gap-1 rounded-2xl bg-neutral-100 px-4 text-center">

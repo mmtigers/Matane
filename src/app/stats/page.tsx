@@ -53,7 +53,7 @@ export default function StatsPage() {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
       <header>
-        <h1 className="text-lg font-bold">統計</h1>
+        <h1 className="text-lg font-bold">わたしデータ</h1>
       </header>
 
       {!visits ? (
