@@ -258,22 +258,37 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
 
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-neutral-600">厳選の1枚</span>
-        <label className="flex h-40 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-100 text-sm text-neutral-600">
+        <div className="flex h-40 items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-100 text-sm text-neutral-600">
           {compressing ? (
             "処理中..."
           ) : photoDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- 圧縮後のdata URLをそのまま表示するため
             <img src={photoDataUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            "タップして写真を選択"
+            "写真を撮るか選んでください"
           )}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoChange}
-          />
-        </label>
+        </div>
+        <div className="flex gap-2">
+          <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-700">
+            📷 写真を撮る
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+          </label>
+          <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-700">
+            🖼 ライブラリから選ぶ
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+          </label>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">
