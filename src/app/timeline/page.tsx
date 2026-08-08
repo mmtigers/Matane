@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ALCOHOL_ICONS, ALCOHOL_OPTIONS, type AlcoholTag } from "@/constants/choices";
 import { SkeletonList } from "@/components/Skeleton";
 import { estimateAverageBudget } from "@/lib/budget";
-import { deleteVisit, duplicateVisit, restoreVisit } from "@/lib/db/checkin";
+import { deleteVisit, restoreVisit } from "@/lib/db/checkin";
 import { useTimelineVisits, type VisitWithVenue } from "@/lib/db/queries";
 import { SAVED_TOAST_KEY } from "@/lib/sessionFlags";
 import { formatMonthLabel, monthKey } from "@/lib/time";
@@ -49,10 +49,9 @@ export default function TimelinePage() {
   // effectで復元する(hydrationミスマッチを避けるため)。
   const [activeTag, setActiveTag] = useState<AlcoholTag | null>(null);
   const [visibleMonthCount, setVisibleMonthCount] = useState(MONTHS_PER_PAGE);
-  // 保存直後の遷移や再チェックインなど、一時的な単発メッセージをまとめて扱う
+  // 保存直後の遷移など、一時的な単発メッセージをまとめて扱う
   // (同時に出さない前提のため単一の状態で十分)。
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [repeatingId, setRepeatingId] = useState<string | null>(null);
   // 削除は行きたいリストと同じ「即実行+5秒アンドゥ」方式に統一する(削除自体は
   // deleteVisitで即座に実行し、取り消された場合のみrestoreVisitで書き戻す)。
   const [undoDelete, setUndoDelete] = useState<VisitWithVenue | null>(null);
@@ -142,16 +141,6 @@ export default function TimelinePage() {
     if (!undoDelete) return;
     await restoreVisit(undoDelete);
     setUndoDelete(null);
-  }
-
-  async function handleRepeat(visit: VisitWithVenue) {
-    setRepeatingId(visit.id);
-    try {
-      await duplicateVisit(visit);
-      setToastMessage(`${visit.venue?.name || "この店"}にもう一度チェックインしました`);
-    } finally {
-      setRepeatingId(null);
-    }
   }
 
   return (
@@ -256,17 +245,6 @@ export default function TimelinePage() {
                           </p>
                         </div>
                       </Link>
-                      {visit.is_completed && (
-                        <button
-                          type="button"
-                          onClick={() => handleRepeat(visit)}
-                          disabled={repeatingId === visit.id}
-                          aria-label="もう一度チェックイン"
-                          className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-neutral-500 focus:ring-2 focus:ring-amber-400 active:bg-neutral-200 disabled:opacity-50"
-                        >
-                          🔁
-                        </button>
-                      )}
                       <button
                         type="button"
                         onClick={() => handleDelete(visit)}
