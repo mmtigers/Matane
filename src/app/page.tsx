@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { AuthStatus } from "@/components/AuthStatus";
 import {
   createCheckInByVenueName,
   createCheckInForVenue,
+  createFamilyCheckIn,
   createInstantCheckIn,
   createWishOnlyVenue,
   scheduleBackgroundSync,
@@ -16,7 +17,8 @@ import {
 import type { LocalVenue } from "@/lib/db/localDb";
 import { searchVenuesLocal, useIncompleteVisits, useSuggestedVenue } from "@/lib/db/queries";
 import { getCurrentLocation } from "@/lib/geo";
-import type { LatLng } from "@/types/models";
+import { compressPhotoToDataUrl, PhotoTooLargeError } from "@/lib/photo";
+import type { LatLng, VenueCategory } from "@/types/models";
 import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
 
 const VENUE_NAME_MAX_LENGTH = 100;
@@ -32,6 +34,12 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<LocalVenue[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [checkInCategory, setCheckInCategory] = useState<VenueCategory>("bar");
+  // familyカテゴリのみ使う2段目のステップ。「名前わかる？」の後にもう1段
+  // 「写真を1枚」を挟み、登録完了までダイアログを閉じずに進める。
+  const [familyStep, setFamilyStep] = useState<"name" | "photo">("name");
+  const [familyPhotoDataUrl, setFamilyPhotoDataUrl] = useState<string | null>(null);
+  const [compressingFamilyPhoto, setCompressingFamilyPhoto] = useState(false);
   const [instantNameInput, setInstantNameInput] = useState("");
   const [pendingLocation, setPendingLocation] = useState<LatLng | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<PlaceCandidate | null>(null);
@@ -88,8 +96,11 @@ export default function HomePage() {
   // 位置情報の取得を待たずにダイアログを即表示することで、体感の待ち時間を縮める
   // (以前は取得完了までダイアログ自体が出ず、無反応に見えていた)。GPSは店内など
   // 電波の弱い場所だと数秒かかることがあるため、直近のキャッシュがあれば再利用する。
-  function openNamePrompt() {
+  function openNamePrompt(category: VenueCategory) {
     setErrorMessage(null);
+    setCheckInCategory(category);
+    setFamilyStep("name");
+    setFamilyPhotoDataUrl(null);
     setPendingLocation(null);
     setInstantNameInput("");
     setSelectedPlace(null);
@@ -138,6 +149,65 @@ export default function HomePage() {
     } finally {
       setCheckingIn(false);
       setPendingLocation(null);
+    }
+  }
+
+  // 「名前わかる？」ダイアログの確定ボタン。飲み屋(bar)はそのままチェックインして
+  // 登録待ちにする(肉付けは後で/register画面)。家族(family)は写真ステップへ進み、
+  // ダイアログを閉じずに1枚登録〜送信まで続ける。
+  function handleNameStepConfirm(name: string) {
+    if (checkInCategory === "family") {
+      setInstantNameInput(name);
+      setFamilyStep("photo");
+      return;
+    }
+    handleInstantCheckIn(name);
+  }
+
+  async function handleFamilyPhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setErrorMessage(null);
+    setCompressingFamilyPhoto(true);
+    try {
+      const dataUrl = await compressPhotoToDataUrl(file);
+      setFamilyPhotoDataUrl(dataUrl);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(
+        error instanceof PhotoTooLargeError ? error.message : "画像の処理に失敗しました"
+      );
+      if (error instanceof PhotoTooLargeError) event.target.value = "";
+    } finally {
+      setCompressingFamilyPhoto(false);
+    }
+  }
+
+  // 家族用瞬録の最終ステップ。写真の有無にかかわらずここで即完了(is_completed: true)
+  // まで一気に進めるため、二次登録画面を経由しない。
+  async function handleFamilyCheckIn() {
+    if (!pendingLocation) return;
+    setShowNamePrompt(false);
+    setErrorMessage(null);
+    setCheckingIn(true);
+    try {
+      const trimmed = instantNameInput.trim();
+      const place = selectedPlace?.name === trimmed ? selectedPlace : undefined;
+      const visitId = await createFamilyCheckIn(
+        pendingLocation,
+        instantNameInput,
+        familyPhotoDataUrl,
+        place ? { placeId: place.placeId, address: place.address } : undefined
+      );
+      setUndoVisitId(visitId);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("登録に失敗しました。");
+    } finally {
+      setCheckingIn(false);
+      setPendingLocation(null);
+      setFamilyPhotoDataUrl(null);
     }
   }
 
@@ -233,22 +303,30 @@ export default function HomePage() {
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{errorMessage}</p>
       )}
 
-      <section className="flex flex-col items-center gap-4 py-8">
-        <button
-          type="button"
-          onClick={openNamePrompt}
-          disabled={checkingIn}
-          className="flex h-48 w-48 flex-col items-center justify-center gap-2 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
-        >
-          {checkingIn ? (
-            <span className="text-base font-semibold">登録中...</span>
-          ) : (
-            <>
-              <span className="text-4xl">📍</span>
-              <span className="text-base font-semibold">今ココを瞬録</span>
-            </>
-          )}
-        </button>
+      <section className="flex flex-col items-center gap-3 py-8">
+        <div className="flex justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => openNamePrompt("bar")}
+            disabled={checkingIn}
+            className="flex h-36 w-36 flex-col items-center justify-center gap-1 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
+          >
+            <span className="text-3xl">📍</span>
+            <span className="text-sm font-semibold">今ココを瞬録</span>
+            <span className="text-[10px] text-black/60">飲み屋・仕事</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openNamePrompt("family")}
+            disabled={checkingIn}
+            className="flex h-36 w-36 flex-col items-center justify-center gap-1 rounded-full bg-neutral-800 text-white shadow-lg shadow-neutral-800/20 transition-transform active:scale-95 disabled:opacity-60"
+          >
+            <span className="text-3xl">🍽️</span>
+            <span className="text-sm font-semibold">お出かけを瞬録</span>
+            <span className="text-[10px] text-white/60">ご飯・公園・買い物</span>
+          </button>
+        </div>
+        {checkingIn && <span className="text-sm font-semibold text-neutral-600">登録中...</span>}
       </section>
 
       {incompleteVisits && incompleteVisits.length > 0 && (
@@ -357,7 +435,66 @@ export default function HomePage() {
         </section>
       )}
 
-      {showNamePrompt && (
+      {showNamePrompt && checkInCategory === "family" && familyStep === "photo" && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="写真を1枚"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+          onClick={() => setShowNamePrompt(false)}
+        >
+          <div
+            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-100 p-5 sm:mb-0"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm text-neutral-900">写真を1枚(なくてもOK)</p>
+
+            <label className="mt-3 flex h-40 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 text-sm text-neutral-600">
+              {compressingFamilyPhoto ? (
+                "処理中..."
+              ) : familyPhotoDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 圧縮後のdata URLをそのまま表示するため
+                <img
+                  src={familyPhotoDataUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                "タップして写真を撮る/選ぶ"
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                disabled={checkingIn || compressingFamilyPhoto}
+                onChange={handleFamilyPhotoChange}
+              />
+            </label>
+
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setFamilyStep("name")}
+                disabled={checkingIn}
+                className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                戻る
+              </button>
+              <button
+                type="button"
+                onClick={handleFamilyCheckIn}
+                disabled={checkingIn || compressingFamilyPhoto}
+                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                {checkingIn ? "登録中..." : familyPhotoDataUrl ? "登録する" : "写真なしで登録"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNamePrompt && !(checkInCategory === "family" && familyStep === "photo") && (
         <div
           role="alertdialog"
           aria-modal="true"
@@ -421,7 +558,7 @@ export default function HomePage() {
                   !checkingIn &&
                   !locatingForPrompt
                 )
-                  handleInstantCheckIn(instantNameInput);
+                  handleNameStepConfirm(instantNameInput);
               }}
               placeholder="候補にない場合は入力(わからなければ空欄でOK)"
               maxLength={VENUE_NAME_MAX_LENGTH}
@@ -439,11 +576,11 @@ export default function HomePage() {
               </button>
               <button
                 type="button"
-                onClick={() => handleInstantCheckIn(instantNameInput)}
+                onClick={() => handleNameStepConfirm(instantNameInput)}
                 disabled={checkingIn || locatingForPrompt}
                 className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
-                登録する
+                {checkingIn ? "登録中..." : checkInCategory === "family" ? "次へ" : "登録する"}
               </button>
             </div>
           </div>

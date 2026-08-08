@@ -61,6 +61,7 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
   }
 
   const visitDate = new Date(visit.visited_at);
+  const isFamily = visit.venue?.category === "family";
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
@@ -91,13 +92,17 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
 
       <section className="rounded-2xl bg-neutral-100 px-4">
         <DetailRow label="誰と" value={visit.who.length > 0 ? visit.who.join(" / ") : "未記録"} />
-        <DetailRow label="また行きたい" value={visit.revisit ?? "未記録"} />
-        <DetailRow label="予算感" value={visit.budget ?? "未記録"} />
-        <DetailRow
-          label="お酒の武器"
-          value={visit.alcohol_tags.length > 0 ? visit.alcohol_tags.join(" / ") : "未記録"}
-        />
-        <DetailRow label="静かさ" value={visit.quietness ?? "未記録"} />
+        {!isFamily && (
+          <>
+            <DetailRow label="また行きたい" value={visit.revisit ?? "未記録"} />
+            <DetailRow label="予算感" value={visit.budget ?? "未記録"} />
+            <DetailRow
+              label="お酒の武器"
+              value={visit.alcohol_tags.length > 0 ? visit.alcohol_tags.join(" / ") : "未記録"}
+            />
+            <DetailRow label="静かさ" value={visit.quietness ?? "未記録"} />
+          </>
+        )}
       </section>
 
       {visit.memo && (
