@@ -1,6 +1,5 @@
 "use client";
 
-import imageCompression from "browser-image-compression";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { ChoiceChips } from "@/components/ChoiceChips";
@@ -20,9 +19,9 @@ import {
 import { completeVisitRegistration, setVenueName } from "@/lib/db/checkin";
 import { useVisitWithVenue } from "@/lib/db/queries";
 import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
+import { compressPhotoToDataUrl, PhotoTooLargeError } from "@/lib/photo";
 import { SAVED_TOAST_KEY } from "@/lib/sessionFlags";
 
-const MAX_UPLOAD_BYTES = 20_000_000;
 const MEMO_MAX_LENGTH = 2000;
 const VENUE_NAME_MAX_LENGTH = 100;
 
@@ -85,26 +84,16 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
     if (!file) return;
 
     setErrorMessage(null);
-
-    // 圧縮前の生ファイルに対する安全弁。モバイルカメラの超高解像度写真をそのまま
-    // デコードしようとしてタブがクラッシュ/フリーズするのを防ぐ。
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setErrorMessage("ファイルサイズが大きすぎます(20MBまで)。別の写真を選んでください");
-      event.target.value = "";
-      return;
-    }
-
     setCompressing(true);
     try {
-      const compressed = await imageCompression(file, {
-        maxWidthOrHeight: 1024,
-        maxSizeMB: 1,
-      });
-      const dataUrl = await imageCompression.getDataUrlFromFile(compressed);
+      const dataUrl = await compressPhotoToDataUrl(file);
       setPhotoDataUrl(dataUrl);
     } catch (error) {
       console.error(error);
-      setErrorMessage("画像の処理に失敗しました");
+      setErrorMessage(
+        error instanceof PhotoTooLargeError ? error.message : "画像の処理に失敗しました"
+      );
+      if (error instanceof PhotoTooLargeError) event.target.value = "";
     } finally {
       setCompressing(false);
     }
@@ -162,6 +151,9 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   }
 
   const needsVenueName = !visit.venue?.name;
+  // 家族での使用がメインのご飯屋・公園・スーパー等では、お酒の武器・静かさなど
+  // 飲み屋向けの項目は不要なため隠す(原則1: 入力を増やさない)。
+  const isFamily = visit.venue?.category === "family";
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
@@ -235,26 +227,35 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
       )}
 
       <ChoiceChips label="誰と" options={WHO_OPTIONS} value={who} onChange={setWho} multiple />
-      <ChoiceChips
-        label="また行きたい"
-        options={REVISIT_OPTIONS}
-        value={revisit}
-        onChange={setRevisit}
-      />
-      <ChoiceChips label="予算感" options={BUDGET_OPTIONS} value={budget} onChange={setBudget} />
-      <ChoiceChips
-        label="お酒の武器"
-        options={ALCOHOL_OPTIONS}
-        value={alcoholTags}
-        onChange={setAlcoholTags}
-        multiple
-      />
-      <ChoiceChips
-        label="静かさ"
-        options={QUIETNESS_OPTIONS}
-        value={quietness}
-        onChange={setQuietness}
-      />
+      {!isFamily && (
+        <>
+          <ChoiceChips
+            label="また行きたい"
+            options={REVISIT_OPTIONS}
+            value={revisit}
+            onChange={setRevisit}
+          />
+          <ChoiceChips
+            label="予算感"
+            options={BUDGET_OPTIONS}
+            value={budget}
+            onChange={setBudget}
+          />
+          <ChoiceChips
+            label="お酒の武器"
+            options={ALCOHOL_OPTIONS}
+            value={alcoholTags}
+            onChange={setAlcoholTags}
+            multiple
+          />
+          <ChoiceChips
+            label="静かさ"
+            options={QUIETNESS_OPTIONS}
+            value={quietness}
+            onChange={setQuietness}
+          />
+        </>
+      )}
 
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-neutral-600">厳選の1枚</span>
