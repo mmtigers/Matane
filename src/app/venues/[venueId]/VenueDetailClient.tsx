@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   commuteDestinations as defaultCommuteDestinations,
@@ -12,15 +11,13 @@ import {
 } from "@/config/commute";
 import { Skeleton } from "@/components/Skeleton";
 import { loadCommuteOverrides } from "@/lib/commuteSettings";
-import { duplicateVisit, toggleVenueWish } from "@/lib/db/checkin";
+import { toggleVenueWish } from "@/lib/db/checkin";
 import { useVenue, useVisitsForVenue } from "@/lib/db/queries";
 import { googleMapsUrl } from "@/lib/geo";
 
 export function VenueDetailClient({ venueId }: { venueId: string }) {
   const venue = useVenue(venueId);
   const visits = useVisitsForVenue(venueId);
-  const router = useRouter();
-  const [checkingIn, setCheckingIn] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [shareCopied, setShareCopied] = useState(false);
   // 設定画面での上書きはlocalStorageに保存されておりSSR時点では読めないため、
@@ -48,18 +45,6 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
   }, [shareCopied]);
 
   const priorityId = useMemo(() => getPriorityDestinationId(now), [now]);
-  const latestCompleted = visits?.find((visit) => visit.is_completed) ?? null;
-
-  async function handleRepeatCheckIn() {
-    if (!latestCompleted) return;
-    setCheckingIn(true);
-    try {
-      await duplicateVisit(latestCompleted);
-      router.push("/timeline");
-    } finally {
-      setCheckingIn(false);
-    }
-  }
 
   async function handleShare() {
     if (!venue) return;
@@ -130,17 +115,6 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
           {shareCopied && <span className="text-xs text-amber-600">コピーしました</span>}
         </div>
       </header>
-
-      {latestCompleted && (
-        <button
-          type="button"
-          onClick={handleRepeatCheckIn}
-          disabled={checkingIn}
-          className="rounded-full bg-amber-400 py-4 text-base font-semibold text-black focus:ring-2 focus:ring-amber-200 disabled:opacity-60"
-        >
-          {checkingIn ? "登録中..." : "前回の設定でチェックイン"}
-        </button>
-      )}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-neutral-600">これまでの訪問</h2>

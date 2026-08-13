@@ -299,29 +299,6 @@ export async function completeVisitRegistration(
   scheduleBackgroundSync();
 }
 
-// 店舗詳細画面の「もう一度チェックイン」。前回のChoiceChips選択を引き継いだ新しいVisitを即座に作る。
-export async function duplicateVisit(previous: LocalVisit) {
-  const visitId = crypto.randomUUID();
-  const visit: LocalVisit = {
-    id: visitId,
-    venue_id: previous.venue_id,
-    visited_at: new Date().toISOString(),
-    is_completed: true,
-    who: previous.who,
-    revisit: previous.revisit,
-    budget: previous.budget,
-    alcohol_tags: previous.alcohol_tags,
-    quietness: previous.quietness,
-    best_photo: null,
-    memo: null,
-    ai_tags: [],
-    syncStatus: "pending",
-  };
-  await localDb.visits.add(visit);
-  scheduleBackgroundSync();
-  return visitId;
-}
-
 // タイムラインからの削除(誤登録の取り消し用)。ローカルからは即座に削除する。
 // 既にSupabaseへ同期済みだった場合は削除キューに積み、sync.tsの通常サイクルで
 // クラウド側の削除も処理する(オフライン中でも取りこぼさず、失敗時は次回再試行される)。
