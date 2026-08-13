@@ -1,4 +1,4 @@
-import type { LatLng } from "@/types/models";
+import type { LatLng, VenueCategory } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 import { findVenueByPlaceId, searchVenuesLocal } from "./queries";
 import { syncPendingChanges } from "./sync";
@@ -34,14 +34,15 @@ function emptyVisitFields(): VisitChoiceFields & { ai_tags: string[] } {
   };
 }
 
-// ホーム画面の「📍今ココを瞬録」用。タップ時に店名を聞き、わかれば即確定する。
+// ホーム画面の「🍺今ココを瞬録」(飲み屋/仕事)用。タップ時に店名を聞き、わかれば即確定する。
 // 周辺店舗候補(Google Places)から選んだ場合はplaceId/addressも合わせて確定させる。
 // わからず空欄の場合はVenueを位置情報のみのプレースホルダーとして作成し、
 // 登録(二次登録)時に確定させる。
 export async function createInstantCheckIn(
   location: LatLng,
   name = "",
-  place?: { placeId: string; address: string | null }
+  place?: { placeId: string; address: string | null },
+  category: VenueCategory = "bar"
 ) {
   // Supabase側のvenues.place_idはunique制約があるため、同じ場所に既存Venueがあれば
   // 新規作成せず再利用する(重複作成するとその回のVenue/Visitとも同期が永久に失敗する)。
@@ -60,12 +61,59 @@ export async function createInstantCheckIn(
     address: place?.address ?? null,
     nearest_station: null,
     is_wished: false,
+    category,
     wish_reason: null,
     syncStatus: "pending",
   };
   await localDb.venues.add(venue);
 
   return createCheckInForVenue(venueId);
+}
+
+// ホーム画面の「🍽お出かけを瞬録」(家族)用。飲み屋向けの二次登録(誰と/また行きたい/
+// 予算感/お酒の武器/静かさ)を挟まず、名前確認〜写真1枚〜送信までを1回の操作で
+// 完結させる。作成と同時にis_completed: trueにするため、「登録待ち」には出てこない。
+export async function createFamilyCheckIn(
+  location: LatLng,
+  name: string,
+  photoDataUrl: string | null,
+  place?: { placeId: string; address: string | null }
+) {
+  const existingVenue = place ? await findVenueByPlaceId(place.placeId) : undefined;
+
+  let venueId: string;
+  if (existingVenue) {
+    venueId = existingVenue.id;
+  } else {
+    venueId = crypto.randomUUID();
+    const venue: LocalVenue = {
+      id: venueId,
+      place_id: place?.placeId ?? null,
+      name: name.trim().slice(0, VENUE_NAME_MAX_LENGTH),
+      location,
+      address: place?.address ?? null,
+      nearest_station: null,
+      is_wished: false,
+      category: "family",
+      wish_reason: null,
+      syncStatus: "pending",
+    };
+    await localDb.venues.add(venue);
+  }
+
+  const visitId = crypto.randomUUID();
+  const visit: LocalVisit = {
+    id: visitId,
+    venue_id: venueId,
+    visited_at: new Date().toISOString(),
+    is_completed: true,
+    ...emptyVisitFields(),
+    best_photo: photoDataUrl,
+    syncStatus: "pending",
+  };
+  await localDb.visits.add(visit);
+  scheduleBackgroundSync();
+  return visitId;
 }
 
 // ホーム画面の検索から、チェックインを経由せず直接「行きたい」へ追加する用。
@@ -114,6 +162,7 @@ export async function createWishOnlyVenue(
     address: options?.place?.address ?? null,
     nearest_station: null,
     is_wished: true,
+    category: "bar",
     wish_reason: options?.wishReason?.length ? options.wishReason : null,
     syncStatus: "pending",
   };
@@ -146,6 +195,7 @@ export async function createCheckInByVenueName(name: string, visitedAt?: string)
       address: null,
       nearest_station: null,
       is_wished: false,
+      category: "bar",
       wish_reason: null,
       syncStatus: "pending",
     };

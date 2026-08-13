@@ -195,41 +195,43 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
         )}
       </section>
 
-      <section className="flex flex-col gap-2 rounded-2xl bg-neutral-100 p-4">
-        <h2 className="text-sm font-semibold text-amber-600">🚃 終電・帰宅アラート</h2>
-        <ul className="flex flex-col gap-1">
-          {destinations.map((destination) => {
-            const lastTrainTime = getLastTrainTime(destination, venue.nearest_station);
-            const minutesLeft = getMinutesUntilLastTrain(lastTrainTime, now);
-            const missed = minutesLeft < 0;
-            const urgent = !missed && minutesLeft <= 30;
-            return (
-              <li
-                key={destination.id}
-                className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
-                  urgent
-                    ? "bg-red-500/10 text-red-600"
-                    : destination.id === priorityId
-                      ? "bg-amber-400/10 text-amber-600"
-                      : "text-neutral-700"
-                }`}
-              >
-                <span>{destination.label}</span>
-                <span className="flex items-center gap-2">
-                  <span className="font-mono">{lastTrainTime}</span>
-                  <span className="text-xs">
-                    {missed
-                      ? "終電を逃しました"
-                      : Number.isFinite(minutesLeft)
-                        ? `あと${minutesLeft}分`
-                        : ""}
+      {venue.category !== "family" && (
+        <section className="flex flex-col gap-2 rounded-2xl bg-neutral-100 p-4">
+          <h2 className="text-sm font-semibold text-amber-600">🚃 終電・帰宅アラート</h2>
+          <ul className="flex flex-col gap-1">
+            {destinations.map((destination) => {
+              const lastTrainTime = getLastTrainTime(destination, venue.nearest_station);
+              const minutesLeft = getMinutesUntilLastTrain(lastTrainTime, now);
+              const missed = minutesLeft < 0;
+              const urgent = !missed && minutesLeft <= 30;
+              return (
+                <li
+                  key={destination.id}
+                  className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+                    urgent
+                      ? "bg-red-500/10 text-red-600"
+                      : destination.id === priorityId
+                        ? "bg-amber-400/10 text-amber-600"
+                        : "text-neutral-700"
+                  }`}
+                >
+                  <span>{destination.label}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono">{lastTrainTime}</span>
+                    <span className="text-xs">
+                      {missed
+                        ? "終電を逃しました"
+                        : Number.isFinite(minutesLeft)
+                          ? `あと${minutesLeft}分`
+                          : ""}
+                    </span>
                   </span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

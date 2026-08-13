@@ -35,6 +35,23 @@ class MataneDB extends Dexie {
       visits: "id, venue_id, visited_at, syncStatus",
       pendingVisitDeletes: "id",
     });
+    // v3: 飲み屋(仕事)/家族向け(ご飯・公園・スーパー等)の区別用にcategoryを追加。
+    // 既存データにはcategoryが無いため、upgradeで一律"bar"を補完する
+    // (旧バージョンはこのアプリ自体が飲み屋記録専用だったため)。
+    this.version(3)
+      .stores({
+        venues: "id, place_id, syncStatus, category",
+        visits: "id, venue_id, visited_at, syncStatus",
+        pendingVisitDeletes: "id",
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table("venues")
+          .toCollection()
+          .modify((venue: LocalVenue) => {
+            if (!venue.category) venue.category = "bar";
+          });
+      });
   }
 }
 

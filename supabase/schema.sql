@@ -12,13 +12,16 @@ create table if not exists venues (
   address text,
   nearest_station text,
   is_wished boolean not null default false,
+  -- bar: 仕事での使用がメインの飲み屋。family: 家族での使用がメインのご飯屋・公園・スーパー等。
+  category text not null default 'bar' check (category in ('bar', 'family')),
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
 
--- 既存環境向けマイグレーション: is_wished列が無い場合のみ追加する(新規作成時は
+-- 既存環境向けマイグレーション: is_wished/category列が無い場合のみ追加する(新規作成時は
 -- 上のcreate table if not existsで既に含まれているため実質no-op)。
 alter table venues add column if not exists is_wished boolean not null default false;
+alter table venues add column if not exists category text not null default 'bar';
 
 -- 「行きたい理由」タグ(例: おいしそう、楽しそう)。venuesは全ユーザー共有マスタなので
 -- is_wishedと同様にVenue側に持たせる。既存環境向けマイグレーション。
