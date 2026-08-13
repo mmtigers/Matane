@@ -5,12 +5,14 @@ export const REVISIT_OPTIONS = ["絶対行く", "機会あり", "1回でいい"]
 export const BUDGET_OPTIONS = ["〜3k", "〜5k", "〜10k", "10k〜"] as const;
 export const ALCOHOL_OPTIONS = ["ビール", "ハイボール", "日本酒", "ワイン"] as const;
 export const QUIETNESS_OPTIONS = ["静か", "普通", "ガヤガヤ"] as const;
+export const WISH_REASON_OPTIONS = ["おいしそう", "楽しそう", "気になる", "雰囲気良さそう"] as const;
 
 export type Who = (typeof WHO_OPTIONS)[number];
 export type Revisit = (typeof REVISIT_OPTIONS)[number];
 export type Budget = (typeof BUDGET_OPTIONS)[number];
 export type AlcoholTag = (typeof ALCOHOL_OPTIONS)[number];
 export type Quietness = (typeof QUIETNESS_OPTIONS)[number];
+export type WishReason = (typeof WISH_REASON_OPTIONS)[number];
 
 // タイムラインのお酒クイックフィルター用アイコン。Record<AlcoholTag, string>に
 // することで、ALCOHOL_OPTIONSに値を追加した際にアイコン未定義があればコンパイル
