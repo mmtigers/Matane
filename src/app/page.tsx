@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { AuthStatus } from "@/components/AuthStatus";
+import { ChoiceChips } from "@/components/ChoiceChips";
+import { WISH_REASON_OPTIONS, type WishReason } from "@/constants/choices";
 import {
   createCheckInByVenueName,
   createCheckInForVenue,
@@ -15,9 +17,10 @@ import {
 } from "@/lib/db/checkin";
 import type { LocalVenue } from "@/lib/db/localDb";
 import { searchVenuesLocal, useIncompleteVisits, useSuggestedVenue } from "@/lib/db/queries";
+import { isoFromDateKeepingCurrentTime, toDateInputValue } from "@/lib/datetimeLocal";
 import { getCurrentLocation } from "@/lib/geo";
 import type { LatLng } from "@/types/models";
-import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
+import { type PlaceCandidate, searchNearbyVenues, searchVenuesByText } from "@/lib/places";
 
 const VENUE_NAME_MAX_LENGTH = 100;
 const NAV_GUIDE_STORAGE_KEY = "matane:seenNavGuide";
@@ -39,6 +42,19 @@ export default function HomePage() {
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [locatingForPrompt, setLocatingForPrompt] = useState(false);
   const [wishSavedMessage, setWishSavedMessage] = useState<string | null>(null);
+  const [showBackdatePrompt, setShowBackdatePrompt] = useState(false);
+  const [backdateNameInput, setBackdateNameInput] = useState("");
+  const [backdateResults, setBackdateResults] = useState<LocalVenue[]>([]);
+  const [backdateSelectedVenue, setBackdateSelectedVenue] = useState<LocalVenue | null>(null);
+  const [backdateDateInput, setBackdateDateInput] = useState("");
+  const [backdateSaving, setBackdateSaving] = useState(false);
+  const [showWishDialog, setShowWishDialog] = useState(false);
+  const [wishDialogNameInput, setWishDialogNameInput] = useState("");
+  const [wishCandidates, setWishCandidates] = useState<PlaceCandidate[]>([]);
+  const [loadingWishCandidates, setLoadingWishCandidates] = useState(false);
+  const [selectedWishPlace, setSelectedWishPlace] = useState<PlaceCandidate | null>(null);
+  const [wishReasons, setWishReasons] = useState<WishReason[]>([]);
+  const [wishDialogSaving, setWishDialogSaving] = useState(false);
   // 初回起動時だけ、増えたタブ(⭐📊🗺️)の意味を軽く案内する。localStorageはSSR側で
   // 読めないため、初期値はSSRと揃えてfalseにし、マウント後のeffectで反映する
   // (hydrationミスマッチを避けるため)。
@@ -84,6 +100,17 @@ export default function HomePage() {
       active = false;
     };
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (!showBackdatePrompt) return;
+    let active = true;
+    searchVenuesLocal(backdateNameInput).then((results) => {
+      if (active) setBackdateResults(results);
+    });
+    return () => {
+      active = false;
+    };
+  }, [backdateNameInput, showBackdatePrompt]);
 
   // 位置情報の取得を待たずにダイアログを即表示することで、体感の待ち時間を縮める
   // (以前は取得完了までダイアログ自体が出ず、無反応に見えていた)。GPSは店内など
@@ -182,14 +209,90 @@ export default function HomePage() {
     );
   }
 
-  // まだ行ったことのない店(友人に勧められた等)を、チェックインを経由せず直接
-  // 行きたいリストへ追加するための入口。
-  async function handleSaveAsWish(name: string) {
+  // まだ行ったことのない店(車から見かけた店・友人に勧められた店など)を、チェックイン
+  // を経由せず直接「行きたい」へ追加するための入口。店名候補をGoogle検索で提示し、
+  // 座標付きで保存できるようにする(車の現在地とお店の位置が一致しないシナリオのため、
+  // 座標は選んだ候補自身のものを使う。現在地はlocationBiasとしてのみ使う)。
+  function openWishDialog(name: string) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    await createWishOnlyVenue(trimmed);
-    setWishSavedMessage(`「${trimmed}」を行きたいリストに追加しました`);
-    setSearchQuery("");
+    setErrorMessage(null);
+    setWishDialogNameInput(trimmed);
+    setWishCandidates([]);
+    setSelectedWishPlace(null);
+    setWishReasons([]);
+    setShowWishDialog(true);
+
+    setLoadingWishCandidates(true);
+    getCurrentLocation({ maximumAge: 30000 })
+      .catch(() => null)
+      .then((location) => searchVenuesByText(trimmed, location ?? undefined))
+      .then(setWishCandidates)
+      .finally(() => setLoadingWishCandidates(false));
+  }
+
+  function handleSelectWishPlace(place: PlaceCandidate) {
+    setSelectedWishPlace(place);
+    setWishDialogNameInput(place.name);
+  }
+
+  async function handleSaveWish() {
+    const trimmed = wishDialogNameInput.trim();
+    if (!trimmed) return;
+    setWishDialogSaving(true);
+    setErrorMessage(null);
+    try {
+      const place = selectedWishPlace?.name === trimmed ? selectedWishPlace : undefined;
+      await createWishOnlyVenue(trimmed, {
+        location: place?.location,
+        place: place ? { placeId: place.placeId, address: place.address } : undefined,
+        wishReason: wishReasons,
+      });
+      setShowWishDialog(false);
+      setWishSavedMessage(`「${trimmed}」を行きたいリストに追加しました`);
+      setSearchQuery("");
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("保存に失敗しました。");
+    } finally {
+      setWishDialogSaving(false);
+    }
+  }
+
+  // 「忘れて数日後に気づいた」を解消するための入口。過去の日付を指定してVisitを作成する。
+  function openBackdatePrompt() {
+    setErrorMessage(null);
+    setBackdateNameInput("");
+    setBackdateResults([]);
+    setBackdateSelectedVenue(null);
+    setBackdateDateInput(toDateInputValue(new Date().toISOString()));
+    setShowBackdatePrompt(true);
+  }
+
+  function handleSelectBackdateVenue(venue: LocalVenue) {
+    setBackdateSelectedVenue(venue);
+    setBackdateNameInput(venue.name);
+  }
+
+  async function handleBackdateSave() {
+    const trimmed = backdateNameInput.trim();
+    if (!trimmed) return;
+    setBackdateSaving(true);
+    setErrorMessage(null);
+    try {
+      const visitedAt = isoFromDateKeepingCurrentTime(backdateDateInput);
+      const useExisting = backdateSelectedVenue?.name === trimmed;
+      const visitId = useExisting
+        ? await createCheckInForVenue(backdateSelectedVenue!.id, visitedAt)
+        : await createCheckInByVenueName(trimmed, visitedAt);
+      setShowBackdatePrompt(false);
+      router.push(`/visits/${visitId}/register`);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("記録に失敗しました。");
+    } finally {
+      setBackdateSaving(false);
+    }
   }
 
   return (
@@ -248,6 +351,13 @@ export default function HomePage() {
               <span className="text-base font-semibold">今ココを瞬録</span>
             </>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={openBackdatePrompt}
+          className="rounded-full bg-neutral-200 px-6 py-2.5 text-sm font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
+        >
+          🕐 後から記録する
         </button>
       </section>
 
@@ -327,7 +437,7 @@ export default function HomePage() {
               </button>
               <button
                 type="button"
-                onClick={() => handleSaveAsWish(searchQuery)}
+                onClick={() => openWishDialog(searchQuery)}
                 className="flex-none rounded-xl border border-dashed border-neutral-300 px-3 py-3 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
               >
                 ☆ 行きたいに保存
@@ -444,6 +554,183 @@ export default function HomePage() {
                 className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
                 登録する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBackdatePrompt && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="後から記録する"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+          onClick={() => setShowBackdatePrompt(false)}
+        >
+          <div
+            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-100 p-5 sm:mb-0"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm text-neutral-900">後から記録する</p>
+
+            <input
+              value={backdateNameInput}
+              onChange={(event) => {
+                setBackdateNameInput(event.target.value);
+                setBackdateSelectedVenue(null);
+              }}
+              placeholder="店名を入力"
+              maxLength={VENUE_NAME_MAX_LENGTH}
+              className="mt-3 w-full rounded-xl bg-neutral-200 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
+            />
+
+            {backdateNameInput.trim() && backdateResults.length > 0 && (
+              <ul className="mt-1.5 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+                {backdateResults.map((venue) => (
+                  <li key={venue.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectBackdateVenue(venue)}
+                      className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
+                        backdateSelectedVenue?.id === venue.id
+                          ? "bg-amber-400/20 text-amber-600"
+                          : "bg-neutral-200 text-neutral-800"
+                      }`}
+                    >
+                      {venue.name}
+                      {venue.nearest_station && (
+                        <span className="ml-2 text-xs text-neutral-600">
+                          {venue.nearest_station}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <label
+              className="mt-3 flex flex-col gap-1 text-xs text-neutral-600"
+              htmlFor="backdate-date"
+            >
+              訪問日
+              <input
+                id="backdate-date"
+                type="date"
+                value={backdateDateInput}
+                max={toDateInputValue(new Date().toISOString())}
+                onChange={(event) => setBackdateDateInput(event.target.value)}
+                className="w-fit rounded-lg bg-neutral-200 px-3 py-1.5 text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </label>
+
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBackdatePrompt(false)}
+                disabled={backdateSaving}
+                className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleBackdateSave}
+                disabled={backdateSaving || !backdateNameInput.trim()}
+                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                {backdateSaving ? "登録中..." : "登録する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWishDialog && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="行きたいに保存"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+          onClick={() => setShowWishDialog(false)}
+        >
+          <div
+            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-100 p-5 sm:mb-0"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm text-neutral-900">行きたいに保存</p>
+
+            {loadingWishCandidates && (
+              <p className="mt-3 text-xs text-neutral-600">候補を検索中...</p>
+            )}
+
+            {!loadingWishCandidates && wishCandidates.length > 0 && (
+              <ul className="mt-3 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+                {wishCandidates.map((place) => (
+                  <li key={place.placeId}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectWishPlace(place)}
+                      className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
+                        selectedWishPlace?.placeId === place.placeId
+                          ? "bg-amber-400/20 text-amber-600"
+                          : "bg-neutral-200 text-neutral-800"
+                      }`}
+                    >
+                      {place.name}
+                      {place.address && (
+                        <span className="ml-2 text-xs text-neutral-600">{place.address}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {!loadingWishCandidates && wishCandidates.length === 0 && (
+              <p className="mt-3 text-xs text-neutral-600">
+                候補が見つかりませんでした。店名で保存できます。
+              </p>
+            )}
+
+            <input
+              value={wishDialogNameInput}
+              onChange={(event) => {
+                setWishDialogNameInput(event.target.value);
+                setSelectedWishPlace(null);
+              }}
+              placeholder="店名を入力"
+              maxLength={VENUE_NAME_MAX_LENGTH}
+              className="mt-3 w-full rounded-xl bg-neutral-200 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
+            />
+
+            <div className="mt-4">
+              <ChoiceChips
+                label="行きたい理由（任意）"
+                options={WISH_REASON_OPTIONS}
+                value={wishReasons}
+                onChange={setWishReasons}
+                multiple
+              />
+            </div>
+
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowWishDialog(false)}
+                disabled={wishDialogSaving}
+                className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveWish}
+                disabled={wishDialogSaving || !wishDialogNameInput.trim()}
+                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                {wishDialogSaving ? "保存中..." : "保存する"}
               </button>
             </div>
           </div>
