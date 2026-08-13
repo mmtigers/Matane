@@ -1,9 +1,20 @@
-import type { LatLng } from "@/types/models";
+import type { LatLng, VenueCategory } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 import { findVenueByPlaceId, searchVenuesLocal } from "./queries";
 import { syncPendingChanges } from "./sync";
 
 const VENUE_NAME_MAX_LENGTH = 100;
+
+// visited_atは「未来の日時」を許容しない(チェックインアプリであり予定管理ではないため)。
+// 不正なISO文字列や未来日時は現在時刻に丸める。どの呼び出し経路(後から記録ダイアログ、
+// 登録画面の日時編集)から来ても、この関数を通すことで一元的にガードする。
+function clampVisitedAt(input: string | undefined): string {
+  if (!input) return new Date().toISOString();
+  const parsed = new Date(input);
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString();
+  const now = new Date();
+  return parsed > now ? now.toISOString() : parsed.toISOString();
+}
 
 type VisitChoiceFields = Pick<
   LocalVisit,
@@ -23,14 +34,15 @@ function emptyVisitFields(): VisitChoiceFields & { ai_tags: string[] } {
   };
 }
 
-// ホーム画面の「📍今ココを瞬録」用。タップ時に店名を聞き、わかれば即確定する。
+// ホーム画面の「🍺今ココを瞬録」(飲み屋/仕事)用。タップ時に店名を聞き、わかれば即確定する。
 // 周辺店舗候補(Google Places)から選んだ場合はplaceId/addressも合わせて確定させる。
 // わからず空欄の場合はVenueを位置情報のみのプレースホルダーとして作成し、
 // 登録(二次登録)時に確定させる。
 export async function createInstantCheckIn(
   location: LatLng,
   name = "",
-  place?: { placeId: string; address: string | null }
+  place?: { placeId: string; address: string | null },
+  category: VenueCategory = "bar"
 ) {
   // Supabase側のvenues.place_idはunique制約があるため、同じ場所に既存Venueがあれば
   // 新規作成せず再利用する(重複作成するとその回のVenue/Visitとも同期が永久に失敗する)。
@@ -49,6 +61,8 @@ export async function createInstantCheckIn(
     address: place?.address ?? null,
     nearest_station: null,
     is_wished: false,
+    category,
+    wish_reason: null,
     syncStatus: "pending",
   };
   await localDb.venues.add(venue);
@@ -56,29 +70,100 @@ export async function createInstantCheckIn(
   return createCheckInForVenue(venueId);
 }
 
+// ホーム画面の「🍽お出かけを瞬録」(家族)用。飲み屋向けの二次登録(誰と/また行きたい/
+// 予算感/お酒の武器/静かさ)を挟まず、名前確認〜写真1枚〜送信までを1回の操作で
+// 完結させる。作成と同時にis_completed: trueにするため、「登録待ち」には出てこない。
+export async function createFamilyCheckIn(
+  location: LatLng,
+  name: string,
+  photoDataUrl: string | null,
+  place?: { placeId: string; address: string | null }
+) {
+  const existingVenue = place ? await findVenueByPlaceId(place.placeId) : undefined;
+
+  let venueId: string;
+  if (existingVenue) {
+    venueId = existingVenue.id;
+  } else {
+    venueId = crypto.randomUUID();
+    const venue: LocalVenue = {
+      id: venueId,
+      place_id: place?.placeId ?? null,
+      name: name.trim().slice(0, VENUE_NAME_MAX_LENGTH),
+      location,
+      address: place?.address ?? null,
+      nearest_station: null,
+      is_wished: false,
+      category: "family",
+      wish_reason: null,
+      syncStatus: "pending",
+    };
+    await localDb.venues.add(venue);
+  }
+
+  const visitId = crypto.randomUUID();
+  const visit: LocalVisit = {
+    id: visitId,
+    venue_id: venueId,
+    visited_at: new Date().toISOString(),
+    is_completed: true,
+    ...emptyVisitFields(),
+    best_photo: photoDataUrl,
+    syncStatus: "pending",
+  };
+  await localDb.visits.add(visit);
+  scheduleBackgroundSync();
+  return visitId;
+}
+
 // ホーム画面の検索から、チェックインを経由せず直接「行きたい」へ追加する用。
-// まだ行ったことのない店(友人に勧められた等)を気軽に記録できるようにする。
-// 同名の既存Venueがあれば新規作成せず、その行きたいフラグだけ立てる。
-export async function createWishOnlyVenue(name: string): Promise<string> {
+// まだ行ったことのない店(友人に勧められた等・車から見かけた店など)を気軽に記録できる
+// ようにする。placeが渡された場合はGoogle Places候補の座標・住所を、wishReasonが
+// 渡された場合は「行きたい理由」タグを合わせて保存する。
+// 重複防止はcreateInstantCheckInと同じ優先順位: place_id一致 → 完全一致店名。
+export async function createWishOnlyVenue(
+  name: string,
+  options?: {
+    location?: LatLng | null;
+    place?: { placeId: string; address: string | null };
+    wishReason?: string[];
+  }
+): Promise<string> {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
   if (!trimmed) throw new Error("店名を入力してください");
+
+  const existingByPlaceId = options?.place
+    ? await findVenueByPlaceId(options.place.placeId)
+    : undefined;
+  if (existingByPlaceId) {
+    await toggleVenueWish(existingByPlaceId.id, true);
+    if (options?.wishReason?.length) {
+      await localDb.venues.update(existingByPlaceId.id, { wish_reason: options.wishReason });
+    }
+    return existingByPlaceId.id;
+  }
 
   const matches = await searchVenuesLocal(trimmed);
   const exactMatch = matches.find((venue) => venue.name === trimmed);
   if (exactMatch) {
     await toggleVenueWish(exactMatch.id, true);
+    if (options?.wishReason?.length) {
+      await localDb.venues.update(exactMatch.id, { wish_reason: options.wishReason });
+    }
     return exactMatch.id;
   }
 
   const venueId = crypto.randomUUID();
   const venue: LocalVenue = {
     id: venueId,
-    place_id: null,
+    place_id: options?.place?.placeId ?? null,
     name: trimmed,
-    location: null,
-    address: null,
+    location: options?.location ?? null,
+    address: options?.place?.address ?? null,
     nearest_station: null,
     is_wished: true,
+    category: "bar",
+    wish_reason: options?.wishReason?.length ? options.wishReason : null,
     syncStatus: "pending",
   };
   await localDb.venues.add(venue);
@@ -88,7 +173,9 @@ export async function createWishOnlyVenue(name: string): Promise<string> {
 
 // ホーム画面共通の「後から登録（店名・駅名検索）」用。既存の店名と完全一致する場合は
 // キャッシュ済みのVenueを再利用し、無ければ入力名でプレースホルダーVenueを作る。
-export async function createCheckInByVenueName(name: string) {
+// visitedAtを渡すと、その日時でVisitを作成する(「後から記録する」ダイアログ用。
+// 省略時は現在時刻)。
+export async function createCheckInByVenueName(name: string, visitedAt?: string) {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
   if (!trimmed) throw new Error("店名を入力してください");
 
@@ -108,22 +195,25 @@ export async function createCheckInByVenueName(name: string) {
       address: null,
       nearest_station: null,
       is_wished: false,
+      category: "bar",
+      wish_reason: null,
       syncStatus: "pending",
     };
     await localDb.venues.add(venue);
   }
 
-  return createCheckInForVenue(venueId);
+  return createCheckInForVenue(venueId, visitedAt);
 }
 
 // ホーム画面の検索結果を直接タップした場合に使う。同名の別Venueが存在していても
 // 名前での再解決を挟まないため、表示されている店舗と紐付け先が食い違わない。
-export async function createCheckInForVenue(venueId: string) {
+// visitedAtを渡すと、その日時でVisitを作成する(省略時は現在時刻)。
+export async function createCheckInForVenue(venueId: string, visitedAt?: string) {
   const visitId = crypto.randomUUID();
   const visit: LocalVisit = {
     id: visitId,
     venue_id: venueId,
-    visited_at: new Date().toISOString(),
+    visited_at: clampVisitedAt(visitedAt),
     is_completed: false,
     ...emptyVisitFields(),
     syncStatus: "pending",
@@ -194,39 +284,19 @@ export async function setVenueName(
 }
 
 // 登録(二次登録)画面の保存。選択項目を反映し、is_completedをtrueにする。
+// visited_atが渡された場合は日時も更新する(登録画面での日時修正用)。
 export async function completeVisitRegistration(
   visitId: string,
-  patch: Partial<VisitChoiceFields>
+  patch: Partial<VisitChoiceFields> & { visited_at?: string }
 ) {
+  const { visited_at, ...rest } = patch;
   await localDb.visits.update(visitId, {
-    ...patch,
+    ...rest,
+    ...(visited_at !== undefined ? { visited_at: clampVisitedAt(visited_at) } : {}),
     is_completed: true,
     syncStatus: "pending",
   });
   scheduleBackgroundSync();
-}
-
-// 店舗詳細画面の「もう一度チェックイン」。前回のChoiceChips選択を引き継いだ新しいVisitを即座に作る。
-export async function duplicateVisit(previous: LocalVisit) {
-  const visitId = crypto.randomUUID();
-  const visit: LocalVisit = {
-    id: visitId,
-    venue_id: previous.venue_id,
-    visited_at: new Date().toISOString(),
-    is_completed: true,
-    who: previous.who,
-    revisit: previous.revisit,
-    budget: previous.budget,
-    alcohol_tags: previous.alcohol_tags,
-    quietness: previous.quietness,
-    best_photo: null,
-    memo: null,
-    ai_tags: [],
-    syncStatus: "pending",
-  };
-  await localDb.visits.add(visit);
-  scheduleBackgroundSync();
-  return visitId;
 }
 
 // タイムラインからの削除(誤登録の取り消し用)。ローカルからは即座に削除する。

@@ -7,6 +7,10 @@ export interface LatLng {
   lng: number;
 }
 
+// bar: 仕事での使用がメインの飲み屋。family: 家族での使用がメインのご飯屋・公園・スーパーなど。
+// ホーム画面の瞬録ボタンをどちらから押したかで決まり、二次登録画面のフォーム内容を切り替える。
+export type VenueCategory = "bar" | "family";
+
 export interface Venue {
   id: string;
   place_id: string | null;
@@ -15,6 +19,8 @@ export interface Venue {
   address: string | null;
   nearest_station: string | null;
   is_wished: boolean;
+  category: VenueCategory;
+  wish_reason: string[] | null;
 }
 
 export interface Visit {

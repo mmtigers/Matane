@@ -49,3 +49,28 @@ export async function uploadVisitPhotoIfNeeded(
     return photo;
   }
 }
+
+// Visitから写真を削除した際、Supabase Storage側に残る実体オブジェクトも削除する。
+// アップロード時の拡張子はimageCompressionの出力形式次第で変わるため決め打ちできず、
+// 代わりにvisitIdをsearchキーにしてユーザーのフォルダ内から該当ファイルを探して消す。
+export async function removeVisitPhoto(visitId: string, userId: string): Promise<void> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error: listError } = await supabase.storage
+      .from(BUCKET)
+      .list(userId, { search: visitId });
+
+    if (listError || !data) return;
+
+    const paths = data
+      .filter((file) => file.name.startsWith(`${visitId}.`))
+      .map((file) => `${userId}/${file.name}`);
+
+    if (paths.length === 0) return;
+
+    const { error } = await supabase.storage.from(BUCKET).remove(paths);
+    if (error) console.warn("写真の削除に失敗しました:", error);
+  } catch (error) {
+    console.warn("写真の削除に失敗しました:", error);
+  }
+}
