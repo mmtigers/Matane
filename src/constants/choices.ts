@@ -23,3 +23,23 @@ export const ALCOHOL_ICONS: Record<AlcoholTag, string> = {
   日本酒: "🍶",
   ワイン: "🍷",
 };
+
+// 瞬録の周辺候補をワンタップで絞り込むためのカテゴリ。Google Places APIのtypesを
+// この4種に集約する(lib/places.tsのcategorizePlace参照)。どれにも当てはまらない
+// 候補はnull扱いとし、「すべて」では出すが個別カテゴリのフィルターには出さない。
+export const PLACE_CATEGORY_OPTIONS = ["food", "park", "shop", "station"] as const;
+export type PlaceCategory = (typeof PLACE_CATEGORY_OPTIONS)[number];
+
+export const PLACE_CATEGORY_LABELS: Record<PlaceCategory, string> = {
+  food: "飲食店",
+  park: "公園",
+  shop: "お店",
+  station: "駅",
+};
+
+export const PLACE_CATEGORY_ICONS: Record<PlaceCategory, string> = {
+  food: "🍴",
+  park: "🌳",
+  shop: "🛍️",
+  station: "🚉",
+};

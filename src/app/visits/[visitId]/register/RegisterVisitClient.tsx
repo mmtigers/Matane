@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { ChoiceChips } from "@/components/ChoiceChips";
+import { PlaceCandidateList } from "@/components/PlaceCandidateList";
 import { Skeleton } from "@/components/Skeleton";
 import {
   ALCOHOL_OPTIONS,
@@ -224,26 +225,12 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
           )}
 
           {!loadingPlaces && placeCandidates.length > 0 && (
-            <ul className="flex max-h-60 flex-col gap-1.5 overflow-y-auto">
-              {placeCandidates.map((place) => (
-                <li key={place.placeId}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectPlace(place)}
-                    className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
-                      selectedPlace?.placeId === place.placeId
-                        ? "bg-amber-400/20 text-amber-600"
-                        : "bg-neutral-100 text-neutral-800"
-                    }`}
-                  >
-                    {place.name}
-                    {place.address && (
-                      <span className="ml-2 text-xs text-neutral-600">{place.address}</span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <PlaceCandidateList
+              candidates={placeCandidates}
+              selectedPlaceId={selectedPlace?.placeId ?? null}
+              onSelect={handleSelectPlace}
+              itemClassName="bg-neutral-100 text-neutral-800"
+            />
           )}
 
           <input
