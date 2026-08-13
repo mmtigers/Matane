@@ -51,7 +51,17 @@ async function reconcileDuplicatePlaceId(
 // geography列はEWKTテキスト("SRID=4326;POINT(lng lat)")を受け付けるため変換して送る。
 // created_byはRLSのINSERT/UPDATEポリシーが要求するため必須で付与する。
 function toVenueRecord(venue: LocalVenue, userId: string) {
-  const { id, place_id, name, location, address, nearest_station, is_wished, category } = venue;
+  const {
+    id,
+    place_id,
+    name,
+    location,
+    address,
+    nearest_station,
+    is_wished,
+    category,
+    wish_reason,
+  } = venue;
   return {
     id,
     place_id,
@@ -61,6 +71,7 @@ function toVenueRecord(venue: LocalVenue, userId: string) {
     nearest_station,
     is_wished: is_wished ?? false,
     category: category ?? "bar",
+    wish_reason: wish_reason ?? null,
     created_by: userId,
   };
 }
@@ -124,6 +135,7 @@ interface CloudVenueRow {
   nearest_station: string | null;
   is_wished?: boolean | null;
   category?: VenueCategory | null;
+  wish_reason?: string[] | null;
 }
 
 interface CloudVisitRow extends Visit {
@@ -140,6 +152,7 @@ function fromVenueRecord(row: CloudVenueRow): LocalVenue {
     nearest_station: row.nearest_station,
     is_wished: row.is_wished ?? false,
     category: row.category ?? "bar",
+    wish_reason: row.wish_reason ?? null,
     syncStatus: "synced",
   };
 }

@@ -20,6 +20,7 @@ export interface Venue {
   nearest_station: string | null;
   is_wished: boolean;
   category: VenueCategory;
+  wish_reason: string[] | null;
 }
 
 export interface Visit {
