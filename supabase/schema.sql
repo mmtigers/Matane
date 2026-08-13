@@ -20,6 +20,10 @@ create table if not exists venues (
 -- 上のcreate table if not existsで既に含まれているため実質no-op)。
 alter table venues add column if not exists is_wished boolean not null default false;
 
+-- 「行きたい理由」タグ(例: おいしそう、楽しそう)。venuesは全ユーザー共有マスタなので
+-- is_wishedと同様にVenue側に持たせる。既存環境向けマイグレーション。
+alter table venues add column if not exists wish_reason text[];
+
 create table if not exists visits (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references auth.users(id) on delete cascade,

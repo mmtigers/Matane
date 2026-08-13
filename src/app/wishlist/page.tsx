@@ -56,6 +56,18 @@ export default function WishlistPage() {
                     {venue.nearest_station || venue.address}
                   </p>
                 )}
+                {venue.wish_reason && venue.wish_reason.length > 0 && (
+                  <p className="mt-1 flex flex-wrap gap-1">
+                    {venue.wish_reason.map((reason) => (
+                      <span
+                        key={reason}
+                        className="rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] text-amber-600"
+                      >
+                        {reason}
+                      </span>
+                    ))}
+                  </p>
+                )}
               </Link>
               <button
                 type="button"

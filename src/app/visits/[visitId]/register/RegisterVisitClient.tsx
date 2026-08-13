@@ -19,6 +19,7 @@ import {
 } from "@/constants/choices";
 import { completeVisitRegistration, setVenueName } from "@/lib/db/checkin";
 import { useVisitWithVenue } from "@/lib/db/queries";
+import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetimeLocal";
 import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
 import { SAVED_TOAST_KEY } from "@/lib/sessionFlags";
 
@@ -32,6 +33,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   const initialized = useRef(false);
 
   const [venueNameInput, setVenueNameInput] = useState("");
+  const [visitedAtInput, setVisitedAtInput] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<PlaceCandidate | null>(null);
   const [placeCandidates, setPlaceCandidates] = useState<PlaceCandidate[]>([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);
@@ -52,6 +54,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
     if (!visit || initialized.current) return;
     initialized.current = true;
     setVenueNameInput(visit.venue?.name ?? "");
+    setVisitedAtInput(toDatetimeLocalValue(visit.visited_at));
     setWho(visit.who);
     setRevisit(visit.revisit ? [visit.revisit] : []);
     setBudget(visit.budget ? [visit.budget] : []);
@@ -132,6 +135,10 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
         );
       }
 
+      const newVisitedAt = visitedAtInput ? fromDatetimeLocalValue(visitedAtInput) : undefined;
+      const visitedAtChanged =
+        newVisitedAt !== undefined && newVisitedAt !== visit.visited_at;
+
       await completeVisitRegistration(visitId, {
         who,
         revisit: revisit[0] ?? null,
@@ -140,6 +147,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
         quietness: quietness[0] ?? null,
         best_photo: photoDataUrl,
         memo: memo.trim() ? memo.trim() : null,
+        ...(visitedAtChanged ? { visited_at: newVisitedAt } : {}),
       });
 
       // タイムライン側で「保存しました」トーストを出すための一時フラグ。
@@ -165,11 +173,19 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
-      <header>
+      <header className="flex flex-col gap-1.5">
         <h1 className="text-lg font-bold">登録</h1>
-        <p className="text-xs text-neutral-600">
-          {new Date(visit.visited_at).toLocaleString("ja-JP")}
-        </p>
+        <label className="flex flex-col gap-1 text-xs text-neutral-600" htmlFor="visited-at">
+          訪問日時
+          <input
+            id="visited-at"
+            type="datetime-local"
+            value={visitedAtInput}
+            max={toDatetimeLocalValue(new Date().toISOString())}
+            onChange={(event) => setVisitedAtInput(event.target.value)}
+            className="w-fit rounded-lg bg-neutral-100 px-3 py-1.5 text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-amber-400"
+          />
+        </label>
       </header>
 
       {errorMessage && (
