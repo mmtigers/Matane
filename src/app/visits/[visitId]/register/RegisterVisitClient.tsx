@@ -16,20 +16,24 @@ import {
   type Revisit,
   type Who,
 } from "@/constants/choices";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { completeVisitRegistration, setVenueName } from "@/lib/db/checkin";
 import { useVisitWithVenue } from "@/lib/db/queries";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetimeLocal";
 import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
 import { compressPhotoToDataUrl, PhotoTooLargeError } from "@/lib/photo";
 import { SAVED_TOAST_KEY } from "@/lib/sessionFlags";
+import { removeVisitPhoto } from "@/lib/storage";
 
 const MEMO_MAX_LENGTH = 2000;
 const VENUE_NAME_MAX_LENGTH = 100;
 
 export function RegisterVisitClient({ visitId }: { visitId: string }) {
   const visit = useVisitWithVenue(visitId);
+  const { session } = useAuth();
   const router = useRouter();
   const initialized = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [venueNameInput, setVenueNameInput] = useState("");
   const [visitedAtInput, setVisitedAtInput] = useState("");
@@ -99,6 +103,20 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
       if (error instanceof PhotoTooLargeError) event.target.value = "";
     } finally {
       setCompressing(false);
+    }
+  }
+
+  function handleRemovePhoto() {
+    setPhotoDataUrl(null);
+    setErrorMessage(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    // 既にSupabase Storageへアップロード済みの写真(data URLではなくURL化されている)
+    // だった場合のみ、クラウド側の実体オブジェクトも削除する。ローカルでの保存(handleSave)
+    // を待たずに削除してよい(このvisitIdへの写真は常に1枚で、キー衝突が起きないため)。
+    const userId = session?.user.id;
+    if (userId && visit?.best_photo && !visit.best_photo.startsWith("data:")) {
+      void removeVisitPhoto(visitId, userId);
     }
   }
 
@@ -275,22 +293,35 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
 
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-neutral-600">厳選の1枚</span>
-        <label className="flex h-40 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-100 text-sm text-neutral-600">
-          {compressing ? (
-            "処理中..."
-          ) : photoDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 圧縮後のdata URLをそのまま表示するため
-            <img src={photoDataUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            "タップして写真を選択"
+        <div className="relative h-40">
+          <label className="flex h-40 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-100 text-sm text-neutral-600">
+            {compressing ? (
+              "処理中..."
+            ) : photoDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- 圧縮後のdata URLをそのまま表示するため
+              <img src={photoDataUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              "タップして写真を選択"
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+          </label>
+          {photoDataUrl && !compressing && (
+            <button
+              type="button"
+              onClick={handleRemovePhoto}
+              aria-label="写真を削除"
+              className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white focus:ring-2 focus:ring-amber-400"
+            >
+              ✕
+            </button>
           )}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoChange}
-          />
-        </label>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">
