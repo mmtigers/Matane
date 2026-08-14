@@ -34,7 +34,8 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   const { session } = useAuth();
   const router = useRouter();
   const initialized = useRef(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
 
   const [venueNameInput, setVenueNameInput] = useState("");
   const [visitedAtInput, setVisitedAtInput] = useState("");
@@ -110,7 +111,8 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   function handleRemovePhoto() {
     setPhotoDataUrl(null);
     setErrorMessage(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (libraryInputRef.current) libraryInputRef.current.value = "";
 
     // 既にSupabase Storageへアップロード済みの写真(data URLではなくURL化されている)
     // だった場合のみ、クラウド側の実体オブジェクトも削除する。ローカルでの保存(handleSave)
@@ -281,23 +283,16 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-neutral-600">厳選の1枚</span>
         <div className="relative h-40">
-          <label className="flex h-40 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-100 text-sm text-neutral-600">
+          <div className="flex h-40 items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-100 text-sm text-neutral-600">
             {compressing ? (
               "処理中..."
             ) : photoDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- 圧縮後のdata URLをそのまま表示するため
               <img src={photoDataUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              "タップして写真を選択"
+              "写真を撮るか選んでください"
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handlePhotoChange}
-            />
-          </label>
+          </div>
           {photoDataUrl && !compressing && (
             <button
               type="button"
@@ -308,6 +303,29 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
               ✕
             </button>
           )}
+        </div>
+        <div className="flex gap-2">
+          <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-700">
+            📷 写真を撮る
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+          </label>
+          <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl bg-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-700">
+            🖼 ライブラリから選ぶ
+            <input
+              ref={libraryInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+          </label>
         </div>
       </div>
 
