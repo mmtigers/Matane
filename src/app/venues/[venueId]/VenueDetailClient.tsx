@@ -101,7 +101,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
             <button
               type="button"
               onClick={() => toggleVenueWish(venueId, !venue.is_wished)}
-              aria-label={venue.is_wished ? "行きたいリストから外す" : "行きたいリストに追加"}
+              aria-label={venue.is_wished ? "気になるリストから外す" : "気になるリストに追加"}
               aria-pressed={venue.is_wished}
               className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-colors focus:ring-2 focus:ring-amber-400 ${
                 venue.is_wished

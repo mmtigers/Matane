@@ -146,7 +146,7 @@ export default function TimelinePage() {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">タイムライン</h1>
+        <h1 className="text-lg font-bold">あしあと</h1>
       </header>
 
       <div className="flex items-center gap-2">

@@ -267,7 +267,7 @@ export default function HomePage() {
     }
   }
 
-  // 検索結果一覧から、チェックインせずにその場で「行きたい」の状態だけ切り替える。
+  // 検索結果一覧から、チェックインせずにその場で「気になる」の状態だけ切り替える。
   async function handleToggleSearchResultWish(venue: LocalVenue) {
     const nextWished = !venue.is_wished;
     await toggleVenueWish(venue.id, nextWished);
@@ -277,7 +277,7 @@ export default function HomePage() {
   }
 
   // まだ行ったことのない店(車から見かけた店・友人に勧められた店など)を、チェックイン
-  // を経由せず直接「行きたい」へ追加するための入口。店名候補をGoogle検索で提示し、
+  // を経由せず直接「気になる」へ追加するための入口。店名候補をGoogle検索で提示し、
   // 座標付きで保存できるようにする(車の現在地とお店の位置が一致しないシナリオのため、
   // 座標は選んだ候補自身のものを使う。現在地はlocationBiasとしてのみ使う)。
   function openWishDialog(name: string) {
@@ -316,7 +316,7 @@ export default function HomePage() {
         wishReason: wishReasons,
       });
       setShowWishDialog(false);
-      setWishSavedMessage(`「${trimmed}」を行きたいリストに追加しました`);
+      setWishSavedMessage(`「${trimmed}」を気になるリストに追加しました`);
       setSearchQuery("");
     } catch (error) {
       console.error(error);
@@ -392,9 +392,9 @@ export default function HomePage() {
             </button>
           </div>
           <ul className="flex flex-col gap-1 text-xs text-neutral-600">
-            <li>⭐ 行きたい: 気になる店を保存しておける場所</li>
-            <li>📊 統計: 訪問回数やよく飲むお酒などの振り返り</li>
-            <li>🗺️ マップ: 訪問済み・行きたい店を地図で確認</li>
+            <li>⭐ 気になる: 行きたいお店を保存しておける場所</li>
+            <li>📊 わたしデータ: 訪問回数やよく飲むお酒などの振り返り</li>
+            <li>🗺️ ちかく: 訪問済み・気になる店を地図で確認</li>
           </ul>
         </section>
       )}
@@ -469,7 +469,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => handleToggleSearchResultWish(venue)}
-                  aria-label={venue.is_wished ? "行きたいリストから外す" : "行きたいリストに追加"}
+                  aria-label={venue.is_wished ? "気になるリストから外す" : "気になるリストに追加"}
                   aria-pressed={venue.is_wished}
                   className={`flex h-11 w-11 flex-none items-center justify-center rounded-full text-lg focus:ring-2 focus:ring-amber-400 ${
                     venue.is_wished
@@ -494,13 +494,13 @@ export default function HomePage() {
                 onClick={() => openWishDialog(searchQuery)}
                 className="flex-none rounded-xl border border-dashed border-neutral-300 px-3 py-3 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
               >
-                ☆ 行きたいに保存
+                ☆ 気になるに保存
               </button>
             </li>
           </ul>
         )}
         <p className="text-xs text-neutral-500">
-          まだ行ったことのない店は「☆ 行きたいに保存」からチェックインせずに登録できます。
+          まだ行ったことのない店は「☆ 気になるに保存」からチェックインせずに登録できます。
         </p>
       </section>
 
@@ -742,7 +742,7 @@ export default function HomePage() {
         <div
           role="alertdialog"
           aria-modal="true"
-          aria-label="行きたいに保存"
+          aria-label="気になるに保存"
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
           onClick={() => setShowWishDialog(false)}
         >
@@ -750,7 +750,7 @@ export default function HomePage() {
             className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-100 p-5 sm:mb-0"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="text-sm text-neutral-900">行きたいに保存</p>
+            <p className="text-sm text-neutral-900">気になるに保存</p>
 
             {loadingWishCandidates && (
               <p className="mt-3 text-xs text-neutral-600">候補を検索中...</p>
@@ -798,7 +798,7 @@ export default function HomePage() {
 
             <div className="mt-4">
               <ChoiceChips
-                label="行きたい理由（任意）"
+                label="気になる理由（任意）"
                 options={WISH_REASON_OPTIONS}
                 value={wishReasons}
                 onChange={setWishReasons}
