@@ -1,23 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { AuthStatus } from "@/components/AuthStatus";
 import { ChoiceChips } from "@/components/ChoiceChips";
 import { PlaceCandidateList } from "@/components/PlaceCandidateList";
 import { WISH_REASON_OPTIONS, type WishReason } from "@/constants/choices";
 import {
-  createNamedCheckIn,
-  createNamedCheckInForVenue,
   createQuickCheckIn,
   createWishOnlyVenue,
+  registerVenueFromPlace,
   scheduleBackgroundSync,
-  toggleVenueWish,
   undoCheckIn,
 } from "@/lib/db/checkin";
-import type { LocalVenue } from "@/lib/db/localDb";
-import { searchVenuesLocal, useSuggestedVenue } from "@/lib/db/queries";
-import { isoFromDateKeepingCurrentTime, toDateInputValue } from "@/lib/datetimeLocal";
+import { useSuggestedVenue } from "@/lib/db/queries";
 import { getCurrentLocation } from "@/lib/geo";
 import { compressPhotoToDataUrl, PhotoTooLargeError } from "@/lib/photo";
 import type { LatLng } from "@/types/models";
@@ -25,12 +21,12 @@ import { type PlaceCandidate, searchNearbyVenues, searchVenuesByText } from "@/l
 
 const VENUE_NAME_MAX_LENGTH = 100;
 const NAV_GUIDE_STORAGE_KEY = "matane:seenNavGuide";
+const VENUE_SEARCH_MIN_LENGTH = 2;
+const VENUE_SEARCH_DEBOUNCE_MS = 500;
 
 export default function HomePage() {
   const [checkingIn, setCheckingIn] = useState(false);
   const [undoVisitId, setUndoVisitId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<LocalVenue[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   // 「ココを記録」共通の2段目のステップ。「名前わかる？」の後にもう1段
@@ -45,11 +41,13 @@ export default function HomePage() {
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [locatingForPrompt, setLocatingForPrompt] = useState(false);
   const [wishSavedMessage, setWishSavedMessage] = useState<string | null>(null);
-  // 「名前で記録」の訪問日。デフォルトは今日、過去日にも変更できる。new Date()を
-  // SSR時点で評価するとhydrationミスマッチになるため、マウント後のeffectで設定する。
-  const [todayDateValue, setTodayDateValue] = useState("");
-  const [namedRegisterDate, setNamedRegisterDate] = useState("");
   const [showNamedDialog, setShowNamedDialog] = useState(false);
+  const [venueNameInput, setVenueNameInput] = useState("");
+  const [venueCandidates, setVenueCandidates] = useState<PlaceCandidate[]>([]);
+  const [loadingVenueCandidates, setLoadingVenueCandidates] = useState(false);
+  const [selectedVenuePlace, setSelectedVenuePlace] = useState<PlaceCandidate | null>(null);
+  const [registeringVenue, setRegisteringVenue] = useState(false);
+  const [venueRegisteredMessage, setVenueRegisteredMessage] = useState<string | null>(null);
   const [showWishDialog, setShowWishDialog] = useState(false);
   const [wishDialogNameInput, setWishDialogNameInput] = useState("");
   const [wishCandidates, setWishCandidates] = useState<PlaceCandidate[]>([]);
@@ -69,13 +67,6 @@ export default function HomePage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorageの値はSSR時点で読めないため、マウント後に一度だけ反映する
       setShowNavGuide(true);
     }
-  }, []);
-
-  useEffect(() => {
-    const today = toDateInputValue(new Date().toISOString());
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- new Date()はSSR時点で評価できないため、マウント後に一度だけ反映する
-    setTodayDateValue(today);
-    setNamedRegisterDate(today);
   }, []);
 
   function dismissNavGuide() {
@@ -99,14 +90,42 @@ export default function HomePage() {
   }, [wishSavedMessage]);
 
   useEffect(() => {
+    if (!venueRegisteredMessage) return;
+    const timer = setTimeout(() => setVenueRegisteredMessage(null), 3000);
+    return () => clearTimeout(timer);
+  }, [venueRegisteredMessage]);
+
+  // 「名前で記録」の店名入力に応じてGoogle Places Text Searchで候補を検索する。
+  // 打鍵のたびにAPIを叩かないよう、入力が止まってからdebounceする。
+  useEffect(() => {
+    if (!showNamedDialog) return;
+    const trimmed = venueNameInput.trim();
+    if (trimmed.length < VENUE_SEARCH_MIN_LENGTH) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 入力が短い間は候補を空に戻すだけの同期的なリセットのため
+      setVenueCandidates([]);
+      setLoadingVenueCandidates(false);
+      return;
+    }
+
+    // GPSの位置情報許可待ちで検索がブロックされないよう、位置情報バイアスは使わずに検索する
+    // (許可ダイアログへの応答待ちで無期限にハングし得るため、打鍵のたびに待たせられない)。
     let active = true;
-    searchVenuesLocal(searchQuery).then((results) => {
-      if (active) setSearchResults(results);
-    });
+    setLoadingVenueCandidates(true);
+    const timer = setTimeout(() => {
+      searchVenuesByText(trimmed)
+        .then((results) => {
+          if (active) setVenueCandidates(results);
+        })
+        .finally(() => {
+          if (active) setLoadingVenueCandidates(false);
+        });
+    }, VENUE_SEARCH_DEBOUNCE_MS);
+
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, [searchQuery]);
+  }, [venueNameInput, showNamedDialog]);
 
   // 位置情報の取得を待たずにダイアログを即表示することで、体感の待ち時間を縮める
   // (以前は取得完了までダイアログ自体が出ず、無反応に見えていた)。GPSは店内など
@@ -141,9 +160,40 @@ export default function HomePage() {
   // 「名前で記録」ダイアログを開く。開くたびに前回の入力をリセットする。
   function openNamedDialog() {
     setErrorMessage(null);
-    setSearchQuery("");
-    setNamedRegisterDate(todayDateValue);
+    setVenueNameInput("");
+    setVenueCandidates([]);
+    setSelectedVenuePlace(null);
     setShowNamedDialog(true);
+  }
+
+  function handleSelectVenuePlace(place: PlaceCandidate) {
+    setSelectedVenuePlace(place);
+    setVenueNameInput(place.name);
+  }
+
+  // 「名前で記録」の登録ボタン。Google候補から選んでいれば場所情報付きで、
+  // 選んでいなければ入力した店名だけでVenueを登録する(Visitは作らない)。
+  async function handleRegisterVenue() {
+    const trimmed = venueNameInput.trim();
+    if (!trimmed) return;
+    setRegisteringVenue(true);
+    setErrorMessage(null);
+    try {
+      const place = selectedVenuePlace?.name === trimmed ? selectedVenuePlace : undefined;
+      await registerVenueFromPlace(
+        trimmed,
+        place
+          ? { placeId: place.placeId, address: place.address, location: place.location }
+          : undefined
+      );
+      setShowNamedDialog(false);
+      setVenueRegisteredMessage(`「${trimmed}」を登録しました`);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("登録に失敗しました。");
+    } finally {
+      setRegisteringVenue(false);
+    }
   }
 
   function handleSelectPlace(place: PlaceCandidate) {
@@ -210,72 +260,6 @@ export default function HomePage() {
     setUndoVisitId(null);
   }
 
-  // 「名前で記録」共通。指定した日付(デフォルト今日)でその場で完了させる。
-  async function checkInForVenue(venueId: string) {
-    setShowNamedDialog(false);
-    setErrorMessage(null);
-    setCheckingIn(true);
-    try {
-      const visitId = await createNamedCheckInForVenue(
-        venueId,
-        isoFromDateKeepingCurrentTime(namedRegisterDate)
-      );
-      setUndoVisitId(visitId);
-      setSearchQuery("");
-    } catch (error) {
-      console.error(error);
-      setErrorMessage("記録に失敗しました。");
-    } finally {
-      setCheckingIn(false);
-    }
-  }
-
-  async function checkInForNewName(name: string) {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setShowNamedDialog(false);
-    setErrorMessage(null);
-    setCheckingIn(true);
-    try {
-      const visitId = await createNamedCheckIn(
-        trimmed,
-        isoFromDateKeepingCurrentTime(namedRegisterDate)
-      );
-      setUndoVisitId(visitId);
-      setSearchQuery("");
-    } catch (error) {
-      console.error(error);
-      setErrorMessage("記録に失敗しました。");
-    } finally {
-      setCheckingIn(false);
-    }
-  }
-
-  // Enterキーで一番上の検索結果へ即進める(候補が無ければ新規チェックイン扱い)。
-  // クリック操作しか受け付けなかったため、キーボード中心の操作を早くする。
-  // isComposingのチェックが無いと、日本語IMEで漢字変換を確定するEnterにも反応し、
-  // 変換途中の文字列でチェックインが走ってしまう。
-  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-    const trimmed = searchQuery.trim();
-    if (!trimmed) return;
-    event.preventDefault();
-    if (searchResults.length > 0) {
-      checkInForVenue(searchResults[0].id);
-    } else {
-      checkInForNewName(trimmed);
-    }
-  }
-
-  // 検索結果一覧から、チェックインせずにその場で「気になる」の状態だけ切り替える。
-  async function handleToggleSearchResultWish(venue: LocalVenue) {
-    const nextWished = !venue.is_wished;
-    await toggleVenueWish(venue.id, nextWished);
-    setSearchResults((current) =>
-      current.map((v) => (v.id === venue.id ? { ...v, is_wished: nextWished } : v))
-    );
-  }
-
   // まだ行ったことのない店(車から見かけた店・友人に勧められた店など)を、チェックイン
   // を経由せず直接「気になる」へ追加するための入口。店名候補をGoogle検索で提示し、
   // 座標付きで保存できるようにする(車の現在地とお店の位置が一致しないシナリオのため、
@@ -318,7 +302,6 @@ export default function HomePage() {
       });
       setShowWishDialog(false);
       setWishSavedMessage(`「${trimmed}」を気になるリストに追加しました`);
-      setSearchQuery("");
     } catch (error) {
       console.error(error);
       setErrorMessage("保存に失敗しました。");
@@ -553,97 +536,65 @@ export default function HomePage() {
           >
             <p className="text-sm text-neutral-900">名前で記録</p>
             <p className="mt-1 text-xs text-neutral-600">
-              今その場にいなくても、店名だけで記録できます。日付も選べます。
+              店名を入力すると、Googleマップの候補から選んで登録できます。
             </p>
 
             <input
               id="venue-search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="店名または駅名"
-              maxLength={100}
+              value={venueNameInput}
+              onChange={(event) => {
+                setVenueNameInput(event.target.value);
+                setSelectedVenuePlace(null);
+              }}
+              placeholder="店名を入力"
+              maxLength={VENUE_NAME_MAX_LENGTH}
               autoFocus
               className="mt-3 w-full rounded-xl bg-neutral-200 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
             />
-            <label
-              className="mt-3 flex items-center gap-2 text-xs text-neutral-600"
-              htmlFor="named-register-date"
-            >
-              訪問日
-              <input
-                id="named-register-date"
-                type="date"
-                value={namedRegisterDate}
-                max={todayDateValue || undefined}
-                onChange={(event) => setNamedRegisterDate(event.target.value)}
-                className="rounded-lg bg-neutral-200 px-3 py-1.5 text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-amber-400"
-              />
-            </label>
 
-            {searchQuery.trim() && (
-              <ul className="mt-3 flex flex-col gap-2">
-                {searchResults.map((venue) => (
-                  <li key={venue.id} className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      data-venue-id={venue.id}
-                      onClick={() => checkInForVenue(venue.id)}
-                      disabled={checkingIn}
-                      className="flex-1 rounded-xl bg-neutral-200 px-4 py-3 text-left focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
-                    >
-                      {venue.name}
-                      {venue.nearest_station && (
-                        <span className="ml-2 text-xs text-neutral-600">
-                          {venue.nearest_station}
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleSearchResultWish(venue)}
-                      aria-label={
-                        venue.is_wished ? "気になるリストから外す" : "気になるリストに追加"
-                      }
-                      aria-pressed={venue.is_wished}
-                      className={`flex h-11 w-11 flex-none items-center justify-center rounded-full text-lg focus:ring-2 focus:ring-amber-400 ${
-                        venue.is_wished
-                          ? "bg-amber-400/20 text-amber-600"
-                          : "bg-neutral-200 text-neutral-500"
-                      }`}
-                    >
-                      {venue.is_wished ? "⭐" : "☆"}
-                    </button>
-                  </li>
-                ))}
-                <li className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => checkInForNewName(searchQuery.trim())}
-                    disabled={checkingIn}
-                    className="flex-1 rounded-xl border border-dashed border-neutral-300 px-4 py-3 text-left text-neutral-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
-                  >
-                    「{searchQuery.trim()}」で新規チェックイン
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openWishDialog(searchQuery)}
-                    className="flex-none rounded-xl border border-dashed border-neutral-300 px-3 py-3 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
-                  >
-                    ☆ 気になるに保存
-                  </button>
-                </li>
-              </ul>
+            {loadingVenueCandidates && (
+              <p className="mt-3 text-xs text-neutral-600">候補を検索中...</p>
             )}
 
-            <p className="mt-3 text-xs text-neutral-500">
-              まだ行ったことのない店は「☆ 気になるに保存」からチェックインせずに登録できます。
-            </p>
+            {!loadingVenueCandidates && venueCandidates.length > 0 && (
+              <PlaceCandidateList
+                candidates={venueCandidates}
+                selectedPlaceId={selectedVenuePlace?.placeId ?? null}
+                onSelect={handleSelectVenuePlace}
+              />
+            )}
+
+            {!loadingVenueCandidates &&
+              venueNameInput.trim().length >= VENUE_SEARCH_MIN_LENGTH &&
+              venueCandidates.length === 0 && (
+                <p className="mt-3 text-xs text-neutral-600">
+                  候補が見つかりませんでした。店名で登録できます。
+                </p>
+              )}
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleRegisterVenue}
+                disabled={registeringVenue || !venueNameInput.trim()}
+                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                {registeringVenue ? "登録中..." : "登録する"}
+              </button>
+              <button
+                type="button"
+                onClick={() => openWishDialog(venueNameInput)}
+                disabled={!venueNameInput.trim()}
+                className="flex-none rounded-xl border border-dashed border-neutral-300 px-3 py-3 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                ☆ 気になるに保存
+              </button>
+            </div>
 
             <button
               type="button"
               onClick={() => setShowNamedDialog(false)}
-              className="mt-4 w-full rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
+              className="mt-3 w-full rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
             >
               閉じる
             </button>
@@ -757,6 +708,12 @@ export default function HomePage() {
       {wishSavedMessage && (
         <div className="fixed inset-x-4 bottom-24 z-50 rounded-xl bg-neutral-200 px-4 py-3 text-center text-sm shadow-lg">
           {wishSavedMessage}
+        </div>
+      )}
+
+      {venueRegisteredMessage && (
+        <div className="fixed inset-x-4 bottom-24 z-50 rounded-xl bg-neutral-200 px-4 py-3 text-center text-sm shadow-lg">
+          {venueRegisteredMessage}
         </div>
       )}
     </main>
