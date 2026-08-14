@@ -9,14 +9,17 @@ test("瞬録チェックイン後、5秒以内ならアンドゥで取り消せ�
   await page.goto("/");
   await page.waitForSelector("#venue-search");
 
-  await page.getByText("今ココを瞬録").click();
-  await page.getByRole("button", { name: "登録する" }).click();
+  await page.getByText("瞬録する").click();
+  await page.getByRole("alertdialog", { name: "名前わかる？" }).waitFor();
+  await page.getByRole("button", { name: "次へ" }).click();
+  await page.getByRole("alertdialog", { name: "写真を1枚" }).waitFor();
+  await page.getByRole("button", { name: "写真なしで登録" }).click();
   await expect(page.getByText("チェックインしました")).toBeVisible();
 
   await page.getByRole("button", { name: "取り消す" }).click();
   await expect(page.getByText("チェックインしました")).not.toBeVisible();
 
-  // 取り消した記録はタイムラインの登録待ちにも出てこない
+  // 取り消した記録はタイムラインにも出てこない
   await page.goto("/timeline");
   await expect(page.getByText("登録待ち")).not.toBeVisible();
 });

@@ -64,7 +64,7 @@ docs/
 
 ## オフライン同期の仕組み
 
-1. 「今ココを瞬録」等の操作は `src/lib/db/checkin.ts` を通じて即座にDexie(IndexedDB)へ書き込まれる（`syncStatus: "pending"`）。
+1. 「瞬録する」等の操作は `src/lib/db/checkin.ts` を通じて即座にDexie(IndexedDB)へ書き込まれる（`syncStatus: "pending"`）。
 2. `src/lib/db/sync.ts` の `syncPendingChanges` がオンライン復帰時・起動時に `syncStatus: "pending"` のレコードをSupabaseへバッチupsertし、成功したものを `"synced"` に更新する。
 3. `src/lib/db/sync.ts` の `pullFromCloud` がログイン直後・起動時にSupabase側の記録をDexieへ取り込む。他端末での記録や、この端末のIndexedDBが空(再インストール等)の場合の復元に使う。ローカルに未送信の変更(`"pending"`)がある行は上書きしない。
 4. IDはクライアント側でUUID生成し、ローカルとクラウドで同一IDを使うため、同期はべき等（idempotent）に行える。
