@@ -8,7 +8,6 @@ import { PlaceCandidateList } from "@/components/PlaceCandidateList";
 import { WISH_REASON_OPTIONS, type WishReason } from "@/constants/choices";
 import {
   createQuickCheckIn,
-  createWishOnlyVenue,
   registerVenueFromPlace,
   scheduleBackgroundSync,
   undoCheckIn,
@@ -40,7 +39,6 @@ export default function HomePage() {
   const [placeCandidates, setPlaceCandidates] = useState<PlaceCandidate[]>([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [locatingForPrompt, setLocatingForPrompt] = useState(false);
-  const [wishSavedMessage, setWishSavedMessage] = useState<string | null>(null);
   const [showNamedDialog, setShowNamedDialog] = useState(false);
   const [venueNameInput, setVenueNameInput] = useState("");
   const [venueCandidates, setVenueCandidates] = useState<PlaceCandidate[]>([]);
@@ -48,13 +46,7 @@ export default function HomePage() {
   const [selectedVenuePlace, setSelectedVenuePlace] = useState<PlaceCandidate | null>(null);
   const [registeringVenue, setRegisteringVenue] = useState(false);
   const [venueRegisteredMessage, setVenueRegisteredMessage] = useState<string | null>(null);
-  const [showWishDialog, setShowWishDialog] = useState(false);
-  const [wishDialogNameInput, setWishDialogNameInput] = useState("");
-  const [wishCandidates, setWishCandidates] = useState<PlaceCandidate[]>([]);
-  const [loadingWishCandidates, setLoadingWishCandidates] = useState(false);
-  const [selectedWishPlace, setSelectedWishPlace] = useState<PlaceCandidate | null>(null);
   const [wishReasons, setWishReasons] = useState<WishReason[]>([]);
-  const [wishDialogSaving, setWishDialogSaving] = useState(false);
   // 初回起動時だけ、増えたタブ(⭐📊🗺️)の意味を軽く案内する。localStorageはSSR側で
   // 読めないため、初期値はSSRと揃えてfalseにし、マウント後のeffectで反映する
   // (hydrationミスマッチを避けるため)。
@@ -82,12 +74,6 @@ export default function HomePage() {
     }, 5000);
     return () => clearTimeout(timer);
   }, [undoVisitId]);
-
-  useEffect(() => {
-    if (!wishSavedMessage) return;
-    const timer = setTimeout(() => setWishSavedMessage(null), 3000);
-    return () => clearTimeout(timer);
-  }, [wishSavedMessage]);
 
   useEffect(() => {
     if (!venueRegisteredMessage) return;
@@ -163,6 +149,7 @@ export default function HomePage() {
     setVenueNameInput("");
     setVenueCandidates([]);
     setSelectedVenuePlace(null);
+    setWishReasons([]);
     setShowNamedDialog(true);
   }
 
@@ -172,7 +159,8 @@ export default function HomePage() {
   }
 
   // 「名前で記録」の登録ボタン。Google候補から選んでいれば場所情報付きで、
-  // 選んでいなければ入力した店名だけでVenueを登録する(Visitは作らない)。
+  // 選んでいなければ入力した店名だけでVenueを登録する(Visitは作らない)。まだ行った
+  // ことのない店を残す唯一の入口のため、登録と同時に「気になる」にも追加する。
   async function handleRegisterVenue() {
     const trimmed = venueNameInput.trim();
     if (!trimmed) return;
@@ -184,10 +172,11 @@ export default function HomePage() {
         trimmed,
         place
           ? { placeId: place.placeId, address: place.address, location: place.location }
-          : undefined
+          : undefined,
+        wishReasons
       );
       setShowNamedDialog(false);
-      setVenueRegisteredMessage(`「${trimmed}」を登録しました`);
+      setVenueRegisteredMessage(`「${trimmed}」を気になるリストに追加しました`);
     } catch (error) {
       console.error(error);
       setErrorMessage("登録に失敗しました。");
@@ -258,56 +247,6 @@ export default function HomePage() {
     if (!undoVisitId) return;
     await undoCheckIn(undoVisitId);
     setUndoVisitId(null);
-  }
-
-  // まだ行ったことのない店(車から見かけた店・友人に勧められた店など)を、チェックイン
-  // を経由せず直接「気になる」へ追加するための入口。店名候補をGoogle検索で提示し、
-  // 座標付きで保存できるようにする(車の現在地とお店の位置が一致しないシナリオのため、
-  // 座標は選んだ候補自身のものを使う。現在地はlocationBiasとしてのみ使う)。
-  function openWishDialog(name: string) {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setShowNamedDialog(false);
-    setErrorMessage(null);
-    setWishDialogNameInput(trimmed);
-    setWishCandidates([]);
-    setSelectedWishPlace(null);
-    setWishReasons([]);
-    setShowWishDialog(true);
-
-    setLoadingWishCandidates(true);
-    getCurrentLocation({ maximumAge: 30000 })
-      .catch(() => null)
-      .then((location) => searchVenuesByText(trimmed, location ?? undefined))
-      .then(setWishCandidates)
-      .finally(() => setLoadingWishCandidates(false));
-  }
-
-  function handleSelectWishPlace(place: PlaceCandidate) {
-    setSelectedWishPlace(place);
-    setWishDialogNameInput(place.name);
-  }
-
-  async function handleSaveWish() {
-    const trimmed = wishDialogNameInput.trim();
-    if (!trimmed) return;
-    setWishDialogSaving(true);
-    setErrorMessage(null);
-    try {
-      const place = selectedWishPlace?.name === trimmed ? selectedWishPlace : undefined;
-      await createWishOnlyVenue(trimmed, {
-        location: place?.location,
-        place: place ? { placeId: place.placeId, address: place.address } : undefined,
-        wishReason: wishReasons,
-      });
-      setShowWishDialog(false);
-      setWishSavedMessage(`「${trimmed}」を気になるリストに追加しました`);
-    } catch (error) {
-      console.error(error);
-      setErrorMessage("保存に失敗しました。");
-    } finally {
-      setWishDialogSaving(false);
-    }
   }
 
   return (
@@ -536,7 +475,7 @@ export default function HomePage() {
           >
             <p className="text-sm text-neutral-900">名前で記録</p>
             <p className="mt-1 text-xs text-neutral-600">
-              店名を入力すると、Googleマップの候補から選んで登録できます。
+              まだ行ったことのない店を、気になるリストに追加できます。Googleマップの候補から選ぶこともできます。
             </p>
 
             <input
@@ -572,94 +511,6 @@ export default function HomePage() {
                 </p>
               )}
 
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={handleRegisterVenue}
-                disabled={registeringVenue || !venueNameInput.trim()}
-                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
-              >
-                {registeringVenue ? "登録中..." : "登録する"}
-              </button>
-              <button
-                type="button"
-                onClick={() => openWishDialog(venueNameInput)}
-                disabled={!venueNameInput.trim()}
-                className="flex-none rounded-xl border border-dashed border-neutral-300 px-3 py-3 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
-              >
-                ☆ 気になるに保存
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowNamedDialog(false)}
-              className="mt-3 w-full rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
-            >
-              閉じる
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showWishDialog && (
-        <div
-          role="alertdialog"
-          aria-modal="true"
-          aria-label="気になるに保存"
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
-          onClick={() => setShowWishDialog(false)}
-        >
-          <div
-            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-100 p-5 sm:mb-0"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="text-sm text-neutral-900">気になるに保存</p>
-
-            {loadingWishCandidates && (
-              <p className="mt-3 text-xs text-neutral-600">候補を検索中...</p>
-            )}
-
-            {!loadingWishCandidates && wishCandidates.length > 0 && (
-              <ul className="mt-3 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
-                {wishCandidates.map((place) => (
-                  <li key={place.placeId}>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectWishPlace(place)}
-                      className={`w-full rounded-xl px-4 py-2 text-left text-sm focus:ring-2 focus:ring-amber-400 ${
-                        selectedWishPlace?.placeId === place.placeId
-                          ? "bg-amber-400/20 text-amber-600"
-                          : "bg-neutral-200 text-neutral-800"
-                      }`}
-                    >
-                      {place.name}
-                      {place.address && (
-                        <span className="ml-2 text-xs text-neutral-600">{place.address}</span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {!loadingWishCandidates && wishCandidates.length === 0 && (
-              <p className="mt-3 text-xs text-neutral-600">
-                候補が見つかりませんでした。店名で保存できます。
-              </p>
-            )}
-
-            <input
-              value={wishDialogNameInput}
-              onChange={(event) => {
-                setWishDialogNameInput(event.target.value);
-                setSelectedWishPlace(null);
-              }}
-              placeholder="店名を入力"
-              maxLength={VENUE_NAME_MAX_LENGTH}
-              className="mt-3 w-full rounded-xl bg-neutral-200 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
-            />
-
             <div className="mt-4">
               <ChoiceChips
                 label="気になる理由（任意）"
@@ -673,19 +524,19 @@ export default function HomePage() {
             <div className="mt-4 flex gap-3">
               <button
                 type="button"
-                onClick={() => setShowWishDialog(false)}
-                disabled={wishDialogSaving}
+                onClick={() => setShowNamedDialog(false)}
+                disabled={registeringVenue}
                 className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
                 キャンセル
               </button>
               <button
                 type="button"
-                onClick={handleSaveWish}
-                disabled={wishDialogSaving || !wishDialogNameInput.trim()}
+                onClick={handleRegisterVenue}
+                disabled={registeringVenue || !venueNameInput.trim()}
                 className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
-                {wishDialogSaving ? "保存中..." : "保存する"}
+                {registeringVenue ? "登録中..." : "登録する"}
               </button>
             </div>
           </div>
@@ -702,12 +553,6 @@ export default function HomePage() {
           >
             取り消す
           </button>
-        </div>
-      )}
-
-      {wishSavedMessage && (
-        <div className="fixed inset-x-4 bottom-24 z-50 rounded-xl bg-neutral-200 px-4 py-3 text-center text-sm shadow-lg">
-          {wishSavedMessage}
         </div>
       )}
 
