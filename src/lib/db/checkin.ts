@@ -135,58 +135,39 @@ export async function createWishOnlyVenue(
   return venueId;
 }
 
-// ホーム画面の「名前で記録」用。GPSを使わず(その場にいない前提)、店名・駅名検索または
-// 新規入力した店名でVisitを作る。既存の店名と完全一致する場合はキャッシュ済みのVenueを
-// 再利用し、無ければ入力名でプレースホルダーVenueを作る。作成と同時に完了
-// (is_completed: true)させるため、二次登録画面を経由しない。
-// visitedAtを渡すと、その日時でVisitを作成する(訪問日を過去に変更した場合用。
-// 省略時は現在時刻)。
-export async function createNamedCheckIn(name: string, visitedAt?: string) {
+// ホーム画面の「名前で記録」用。GPSを使わず(その場にいない前提)、Google Places検索結果
+// から選んだ店舗をVenue(店舗マスタ)として事前登録する。Visit(来店記録)は作らない。
+// 重複防止はcreateQuickCheckInと同じ優先順位: place_id一致 → 完全一致店名。
+export async function registerVenueFromPlace(
+  name: string,
+  place?: { placeId: string; address: string | null; location: LatLng | null }
+): Promise<string> {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
   if (!trimmed) throw new Error("店名を入力してください");
 
+  const existingByPlaceId = place ? await findVenueByPlaceId(place.placeId) : undefined;
+  if (existingByPlaceId) return existingByPlaceId.id;
+
   const matches = await searchVenuesLocal(trimmed);
   const exactMatch = matches.find((venue) => venue.name === trimmed);
+  if (exactMatch) return exactMatch.id;
 
-  let venueId: string;
-  if (exactMatch) {
-    venueId = exactMatch.id;
-  } else {
-    venueId = crypto.randomUUID();
-    const venue: LocalVenue = {
-      id: venueId,
-      place_id: null,
-      name: trimmed,
-      location: null,
-      address: null,
-      nearest_station: null,
-      is_wished: false,
-      category: "family",
-      wish_reason: null,
-      syncStatus: "pending",
-    };
-    await localDb.venues.add(venue);
-  }
-
-  return createNamedCheckInForVenue(venueId, visitedAt);
-}
-
-// ホーム画面の検索結果を直接タップした場合に使う。同名の別Venueが存在していても
-// 名前での再解決を挟まないため、表示されている店舗と紐付け先が食い違わない。
-// visitedAtを渡すと、その日時でVisitを作成する(省略時は現在時刻)。
-export async function createNamedCheckInForVenue(venueId: string, visitedAt?: string) {
-  const visitId = crypto.randomUUID();
-  const visit: LocalVisit = {
-    id: visitId,
-    venue_id: venueId,
-    visited_at: clampVisitedAt(visitedAt),
-    is_completed: true,
-    ...emptyVisitFields(),
+  const venueId = crypto.randomUUID();
+  const venue: LocalVenue = {
+    id: venueId,
+    place_id: place?.placeId ?? null,
+    name: trimmed,
+    location: place?.location ?? null,
+    address: place?.address ?? null,
+    nearest_station: null,
+    is_wished: false,
+    category: "family",
+    wish_reason: null,
     syncStatus: "pending",
   };
-  await localDb.visits.add(visit);
+  await localDb.venues.add(venue);
   scheduleBackgroundSync();
-  return visitId;
+  return venueId;
 }
 
 // 5秒間の「取り消す」スナックバー用。基本は未同期のはずだが、5秒の間にバック

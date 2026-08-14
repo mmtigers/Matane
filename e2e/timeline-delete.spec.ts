@@ -1,10 +1,21 @@
 import { expect, test } from "@playwright/test";
 
+test.use({
+  geolocation: { latitude: 35.6812, longitude: 139.7671 },
+  permissions: ["geolocation"],
+});
+
 test("タイムラインから記録を削除でき、5秒以内なら取り消せる", async ({ page }) => {
   await page.goto("/");
-  await page.getByText("名前で記録").click();
-  await page.fill("#venue-search", "削除テスト店");
-  await page.getByText("「削除テスト店」で新規チェックイン").click();
+  await page.getByText("ココを記録").click();
+  await page.getByRole("alertdialog", { name: "名前わかる？" }).waitFor();
+  await page.fill(
+    'input[placeholder="候補にない場合は入力(わからなければ空欄でOK)"]',
+    "削除テスト店"
+  );
+  await page.getByRole("button", { name: "次へ" }).click();
+  await page.getByRole("alertdialog", { name: "写真を1枚" }).waitFor();
+  await page.getByRole("button", { name: "写真なしで登録" }).click();
   await expect(page.getByText("チェックインしました")).toBeVisible();
   await page.waitForTimeout(5500);
 
