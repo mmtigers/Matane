@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("タイムラインから記録を削除でき、5秒以内なら取り消せる", async ({ page }) => {
   await page.goto("/");
-  await page.waitForSelector("#venue-search");
+  await page.getByText("名前で記録").click();
   await page.fill("#venue-search", "削除テスト店");
   await page.getByText("「削除テスト店」で新規チェックイン").click();
   await expect(page.getByText("チェックインしました")).toBeVisible();

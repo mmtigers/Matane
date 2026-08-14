@@ -7,9 +7,8 @@ test.use({
 
 test("瞬録チェックイン後、5秒以内ならアンドゥで取り消せる", async ({ page }) => {
   await page.goto("/");
-  await page.waitForSelector("#venue-search");
 
-  await page.getByText("瞬録する").click();
+  await page.getByText("ココを記録").click();
   await page.getByRole("alertdialog", { name: "名前わかる？" }).waitFor();
   await page.getByRole("button", { name: "次へ" }).click();
   await page.getByRole("alertdialog", { name: "写真を1枚" }).waitFor();

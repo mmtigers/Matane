@@ -33,7 +33,7 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<LocalVenue[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
-  // 「瞬録する」共通の2段目のステップ。「名前わかる？」の後にもう1段
+  // 「ココを記録」共通の2段目のステップ。「名前わかる？」の後にもう1段
   // 「写真を1枚」を挟み、登録完了までダイアログを閉じずに進める。
   const [quickStep, setQuickStep] = useState<"name" | "photo">("name");
   const [quickPhotoDataUrl, setQuickPhotoDataUrl] = useState<string | null>(null);
@@ -45,10 +45,11 @@ export default function HomePage() {
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [locatingForPrompt, setLocatingForPrompt] = useState(false);
   const [wishSavedMessage, setWishSavedMessage] = useState<string | null>(null);
-  // 「名前で登録」の訪問日。デフォルトは今日、過去日にも変更できる。new Date()を
+  // 「名前で記録」の訪問日。デフォルトは今日、過去日にも変更できる。new Date()を
   // SSR時点で評価するとhydrationミスマッチになるため、マウント後のeffectで設定する。
   const [todayDateValue, setTodayDateValue] = useState("");
   const [namedRegisterDate, setNamedRegisterDate] = useState("");
+  const [showNamedDialog, setShowNamedDialog] = useState(false);
   const [showWishDialog, setShowWishDialog] = useState(false);
   const [wishDialogNameInput, setWishDialogNameInput] = useState("");
   const [wishCandidates, setWishCandidates] = useState<PlaceCandidate[]>([]);
@@ -137,6 +138,14 @@ export default function HomePage() {
       .finally(() => setLocatingForPrompt(false));
   }
 
+  // 「名前で記録」ダイアログを開く。開くたびに前回の入力をリセットする。
+  function openNamedDialog() {
+    setErrorMessage(null);
+    setSearchQuery("");
+    setNamedRegisterDate(todayDateValue);
+    setShowNamedDialog(true);
+  }
+
   function handleSelectPlace(place: PlaceCandidate) {
     setSelectedPlace(place);
     setInstantNameInput(place.name);
@@ -168,7 +177,7 @@ export default function HomePage() {
     }
   }
 
-  // 「瞬録する」の最終ステップ。写真の有無にかかわらずここで即完了(is_completed: true)
+  // 「ココを記録」の最終ステップ。写真の有無にかかわらずここで即完了(is_completed: true)
   // まで一気に進めるため、二次登録画面を経由しない。
   async function handleQuickCheckInSubmit() {
     if (!pendingLocation) return;
@@ -201,8 +210,9 @@ export default function HomePage() {
     setUndoVisitId(null);
   }
 
-  // 「名前で登録」共通。指定した日付(デフォルト今日)でその場で完了させる。
+  // 「名前で記録」共通。指定した日付(デフォルト今日)でその場で完了させる。
   async function checkInForVenue(venueId: string) {
+    setShowNamedDialog(false);
     setErrorMessage(null);
     setCheckingIn(true);
     try {
@@ -223,6 +233,7 @@ export default function HomePage() {
   async function checkInForNewName(name: string) {
     const trimmed = name.trim();
     if (!trimmed) return;
+    setShowNamedDialog(false);
     setErrorMessage(null);
     setCheckingIn(true);
     try {
@@ -272,6 +283,7 @@ export default function HomePage() {
   function openWishDialog(name: string) {
     const trimmed = name.trim();
     if (!trimmed) return;
+    setShowNamedDialog(false);
     setErrorMessage(null);
     setWishDialogNameInput(trimmed);
     setWishCandidates([]);
@@ -356,7 +368,7 @@ export default function HomePage() {
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{errorMessage}</p>
       )}
 
-      <section className="flex flex-col items-center gap-3 py-8">
+      <section className="flex flex-col items-center gap-4 py-8">
         <button
           type="button"
           onClick={openNamePrompt}
@@ -364,97 +376,20 @@ export default function HomePage() {
           className="flex h-40 w-40 flex-col items-center justify-center gap-1 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
         >
           <span className="text-3xl">📍</span>
-          <span className="text-base font-semibold">瞬録する</span>
+          <span className="text-base font-semibold">ココを記録</span>
           <span className="text-[10px] text-black/60">今いる場所をサクッと記録</span>
         </button>
-        {checkingIn && <span className="text-sm font-semibold text-neutral-600">登録中...</span>}
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-neutral-600" htmlFor="venue-search">
-          名前で登録（店名・駅名で検索）
-        </label>
-        <p className="text-xs text-neutral-500">
-          今その場にいなくても、店名だけで記録できます。日付も選べます。
-        </p>
-        <input
-          id="venue-search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          onKeyDown={handleSearchKeyDown}
-          placeholder="店名または駅名"
-          maxLength={100}
-          className="rounded-xl bg-neutral-100 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
-        />
-        <label
-          className="flex items-center gap-2 text-xs text-neutral-600"
-          htmlFor="named-register-date"
+        <button
+          type="button"
+          onClick={openNamedDialog}
+          disabled={checkingIn}
+          className="flex h-40 w-40 flex-col items-center justify-center gap-1 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
         >
-          訪問日
-          <input
-            id="named-register-date"
-            type="date"
-            value={namedRegisterDate}
-            max={todayDateValue || undefined}
-            onChange={(event) => setNamedRegisterDate(event.target.value)}
-            className="rounded-lg bg-neutral-100 px-3 py-1.5 text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-amber-400"
-          />
-        </label>
-        {searchQuery.trim() && (
-          <ul className="flex flex-col gap-2">
-            {searchResults.map((venue) => (
-              <li key={venue.id} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  data-venue-id={venue.id}
-                  onClick={() => checkInForVenue(venue.id)}
-                  disabled={checkingIn}
-                  className="flex-1 rounded-xl bg-neutral-100 px-4 py-3 text-left focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
-                >
-                  {venue.name}
-                  {venue.nearest_station && (
-                    <span className="ml-2 text-xs text-neutral-600">
-                      {venue.nearest_station}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleToggleSearchResultWish(venue)}
-                  aria-label={venue.is_wished ? "気になるリストから外す" : "気になるリストに追加"}
-                  aria-pressed={venue.is_wished}
-                  className={`flex h-11 w-11 flex-none items-center justify-center rounded-full text-lg focus:ring-2 focus:ring-amber-400 ${
-                    venue.is_wished
-                      ? "bg-amber-400/20 text-amber-600"
-                      : "bg-neutral-100 text-neutral-500"
-                  }`}
-                >
-                  {venue.is_wished ? "⭐" : "☆"}
-                </button>
-              </li>
-            ))}
-            <li className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => checkInForNewName(searchQuery.trim())}
-                disabled={checkingIn}
-                className="flex-1 rounded-xl border border-dashed border-neutral-300 px-4 py-3 text-left text-neutral-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
-              >
-                「{searchQuery.trim()}」で新規チェックイン
-              </button>
-              <button
-                type="button"
-                onClick={() => openWishDialog(searchQuery)}
-                className="flex-none rounded-xl border border-dashed border-neutral-300 px-3 py-3 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
-              >
-                ☆ 気になるに保存
-              </button>
-            </li>
-          </ul>
-        )}
-        <p className="text-xs text-neutral-500">
-          まだ行ったことのない店は「☆ 気になるに保存」からチェックインせずに登録できます。
-        </p>
+          <span className="text-3xl">🔍</span>
+          <span className="text-base font-semibold">名前で記録</span>
+          <span className="text-[10px] text-black/60">店名・駅名で記録</span>
+        </button>
+        {checkingIn && <span className="text-sm font-semibold text-neutral-600">登録中...</span>}
       </section>
 
       {suggestion?.venue && (
@@ -600,6 +535,118 @@ export default function HomePage() {
                 次へ
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showNamedDialog && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="名前で記録"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+          onClick={() => setShowNamedDialog(false)}
+        >
+          <div
+            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-100 p-5 sm:mb-0"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm text-neutral-900">名前で記録</p>
+            <p className="mt-1 text-xs text-neutral-600">
+              今その場にいなくても、店名だけで記録できます。日付も選べます。
+            </p>
+
+            <input
+              id="venue-search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="店名または駅名"
+              maxLength={100}
+              autoFocus
+              className="mt-3 w-full rounded-xl bg-neutral-200 px-4 py-3 text-base outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-400"
+            />
+            <label
+              className="mt-3 flex items-center gap-2 text-xs text-neutral-600"
+              htmlFor="named-register-date"
+            >
+              訪問日
+              <input
+                id="named-register-date"
+                type="date"
+                value={namedRegisterDate}
+                max={todayDateValue || undefined}
+                onChange={(event) => setNamedRegisterDate(event.target.value)}
+                className="rounded-lg bg-neutral-200 px-3 py-1.5 text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </label>
+
+            {searchQuery.trim() && (
+              <ul className="mt-3 flex flex-col gap-2">
+                {searchResults.map((venue) => (
+                  <li key={venue.id} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      data-venue-id={venue.id}
+                      onClick={() => checkInForVenue(venue.id)}
+                      disabled={checkingIn}
+                      className="flex-1 rounded-xl bg-neutral-200 px-4 py-3 text-left focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+                    >
+                      {venue.name}
+                      {venue.nearest_station && (
+                        <span className="ml-2 text-xs text-neutral-600">
+                          {venue.nearest_station}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSearchResultWish(venue)}
+                      aria-label={
+                        venue.is_wished ? "気になるリストから外す" : "気になるリストに追加"
+                      }
+                      aria-pressed={venue.is_wished}
+                      className={`flex h-11 w-11 flex-none items-center justify-center rounded-full text-lg focus:ring-2 focus:ring-amber-400 ${
+                        venue.is_wished
+                          ? "bg-amber-400/20 text-amber-600"
+                          : "bg-neutral-200 text-neutral-500"
+                      }`}
+                    >
+                      {venue.is_wished ? "⭐" : "☆"}
+                    </button>
+                  </li>
+                ))}
+                <li className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => checkInForNewName(searchQuery.trim())}
+                    disabled={checkingIn}
+                    className="flex-1 rounded-xl border border-dashed border-neutral-300 px-4 py-3 text-left text-neutral-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+                  >
+                    「{searchQuery.trim()}」で新規チェックイン
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openWishDialog(searchQuery)}
+                    className="flex-none rounded-xl border border-dashed border-neutral-300 px-3 py-3 text-xs font-semibold text-amber-600 focus:ring-2 focus:ring-amber-400"
+                  >
+                    ☆ 気になるに保存
+                  </button>
+                </li>
+              </ul>
+            )}
+
+            <p className="mt-3 text-xs text-neutral-500">
+              まだ行ったことのない店は「☆ 気になるに保存」からチェックインせずに登録できます。
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowNamedDialog(false)}
+              className="mt-4 w-full rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
+            >
+              閉じる
+            </button>
           </div>
         </div>
       )}

@@ -6,13 +6,12 @@ test.use({
   permissions: ["geolocation"],
 });
 
-// 瞬録は、飲み屋向けの二次登録(誰と/また行きたい/予算感/お酒の武器/静かさ)を
+// 「ココを記録」は、飲み屋向けの二次登録(誰と/また行きたい/予算感/お酒の武器/静かさ)を
 // 経由せず、名前確認〜写真1枚〜送信までダイアログ内の1操作で完結する。
-test("瞬録は写真登録まで一気通貫で完了し、登録待ちに残らない", async ({ page }) => {
+test("ココを記録は写真登録まで一気通貫で完了し、登録待ちに残らない", async ({ page }) => {
   await page.goto("/");
-  await page.waitForSelector("#venue-search");
 
-  await page.getByText("瞬録する").click();
+  await page.getByText("ココを記録").click();
   await page.getByRole("alertdialog", { name: "名前わかる？" }).waitFor();
   await page.fill(
     'input[placeholder="候補にない場合は入力(わからなければ空欄でOK)"]',
@@ -29,7 +28,7 @@ test("瞬録は写真登録まで一気通貫で完了し、登録待ちに残�
   await page.getByRole("button", { name: "登録する" }).click();
 
   await expect(page.getByText("チェックインしました")).toBeVisible();
-  // 瞬録は作成と同時にis_completed: trueになるため、登録待ちには出てこない。
+  // ココを記録は作成と同時にis_completed: trueになるため、登録待ちには出てこない。
   await expect(page.getByText("登録待ち")).not.toBeVisible();
 
   await page.waitForTimeout(5500);

@@ -23,9 +23,9 @@ async function latestVisitIdForVenueName(page: import("@playwright/test").Page, 
 }
 
 test("同名の店舗が複数あっても検索結果のクリック先と紐付け先が一致する", async ({ page }) => {
-  // Venue A: 「名前で登録」から作成
+  // Venue A: 「名前で記録」から作成
   await page.goto("/");
-  await page.waitForSelector("#venue-search");
+  await page.getByText("名前で記録").click();
   await page.fill("#venue-search", "回帰テスト店");
   await page.getByText("「回帰テスト店」で新規チェックイン").click();
   await expect(page.getByText("チェックインしました")).toBeVisible();
@@ -34,10 +34,9 @@ test("同名の店舗が複数あっても検索結果のクリック先と紐�
   const visitIdA = await latestVisitIdForVenueName(page, "回帰テスト店");
   const venueIdA = await venueIdFromVisitDetail(page, visitIdA);
 
-  // Venue B: 「瞬録する」(GPS)で同じ店名を入力して作成
+  // Venue B: 「ココを記録」(GPS)で同じ店名を入力して作成
   await page.goto("/");
-  await page.waitForSelector("#venue-search");
-  await page.getByText("瞬録する").click();
+  await page.getByText("ココを記録").click();
   await page.getByRole("alertdialog", { name: "名前わかる？" }).waitFor();
   await page.fill(
     'input[placeholder="候補にない場合は入力(わからなければ空欄でOK)"]',
@@ -58,7 +57,7 @@ test("同名の店舗が複数あっても検索結果のクリック先と紐�
   // (Dexieの.toArray()はUUID主キー順のため画面上の並び順は作成順と一致しない)
   // タップした店舗と紐付け先が一致することを確認する。
   await page.goto("/");
-  await page.waitForSelector("#venue-search");
+  await page.getByText("名前で記録").click();
   await page.fill("#venue-search", "回帰テスト店");
   const targetResult = page.locator(`button[data-venue-id="${venueIdB}"]`);
   await targetResult.click();
