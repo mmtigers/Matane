@@ -80,29 +80,25 @@ export async function createQuickCheckIn(
   return visitId;
 }
 
-// ホーム画面の検索から、チェックインを経由せず直接「行きたい」へ追加する用。
-// まだ行ったことのない店(友人に勧められた等・車から見かけた店など)を気軽に記録できる
-// ようにする。placeが渡された場合はGoogle Places候補の座標・住所を、wishReasonが
-// 渡された場合は「行きたい理由」タグを合わせて保存する。
+// ホーム画面の「名前で記録」用。GPSを使わず(その場にいない前提)、Google Places検索結果
+// から選んだ店舗をVenue(店舗マスタ)として事前登録し、そのまま「気になる」にも追加する
+// (is_wished: true)。まだ行ったことのない店を記録する唯一の入口のため、登録した時点で
+// 気になるリストに出てこないと二度と辿り着けなくなるので、登録=気になる登録として一体化する。
+// wishReasonが渡された場合は「気になる理由」タグを合わせて保存する。Visit(来店記録)は作らない。
 // 重複防止はcreateQuickCheckInと同じ優先順位: place_id一致 → 完全一致店名。
-export async function createWishOnlyVenue(
+export async function registerVenueFromPlace(
   name: string,
-  options?: {
-    location?: LatLng | null;
-    place?: { placeId: string; address: string | null };
-    wishReason?: string[];
-  }
+  place?: { placeId: string; address: string | null; location: LatLng | null },
+  wishReason?: string[]
 ): Promise<string> {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
   if (!trimmed) throw new Error("店名を入力してください");
 
-  const existingByPlaceId = options?.place
-    ? await findVenueByPlaceId(options.place.placeId)
-    : undefined;
+  const existingByPlaceId = place ? await findVenueByPlaceId(place.placeId) : undefined;
   if (existingByPlaceId) {
     await toggleVenueWish(existingByPlaceId.id, true);
-    if (options?.wishReason?.length) {
-      await localDb.venues.update(existingByPlaceId.id, { wish_reason: options.wishReason });
+    if (wishReason?.length) {
+      await localDb.venues.update(existingByPlaceId.id, { wish_reason: wishReason });
     }
     return existingByPlaceId.id;
   }
@@ -111,46 +107,11 @@ export async function createWishOnlyVenue(
   const exactMatch = matches.find((venue) => venue.name === trimmed);
   if (exactMatch) {
     await toggleVenueWish(exactMatch.id, true);
-    if (options?.wishReason?.length) {
-      await localDb.venues.update(exactMatch.id, { wish_reason: options.wishReason });
+    if (wishReason?.length) {
+      await localDb.venues.update(exactMatch.id, { wish_reason: wishReason });
     }
     return exactMatch.id;
   }
-
-  const venueId = crypto.randomUUID();
-  const venue: LocalVenue = {
-    id: venueId,
-    place_id: options?.place?.placeId ?? null,
-    name: trimmed,
-    location: options?.location ?? null,
-    address: options?.place?.address ?? null,
-    nearest_station: null,
-    is_wished: true,
-    category: "bar",
-    wish_reason: options?.wishReason?.length ? options.wishReason : null,
-    syncStatus: "pending",
-  };
-  await localDb.venues.add(venue);
-  scheduleBackgroundSync();
-  return venueId;
-}
-
-// ホーム画面の「名前で記録」用。GPSを使わず(その場にいない前提)、Google Places検索結果
-// から選んだ店舗をVenue(店舗マスタ)として事前登録する。Visit(来店記録)は作らない。
-// 重複防止はcreateQuickCheckInと同じ優先順位: place_id一致 → 完全一致店名。
-export async function registerVenueFromPlace(
-  name: string,
-  place?: { placeId: string; address: string | null; location: LatLng | null }
-): Promise<string> {
-  const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
-  if (!trimmed) throw new Error("店名を入力してください");
-
-  const existingByPlaceId = place ? await findVenueByPlaceId(place.placeId) : undefined;
-  if (existingByPlaceId) return existingByPlaceId.id;
-
-  const matches = await searchVenuesLocal(trimmed);
-  const exactMatch = matches.find((venue) => venue.name === trimmed);
-  if (exactMatch) return exactMatch.id;
 
   const venueId = crypto.randomUUID();
   const venue: LocalVenue = {
@@ -160,9 +121,9 @@ export async function registerVenueFromPlace(
     location: place?.location ?? null,
     address: place?.address ?? null,
     nearest_station: null,
-    is_wished: false,
+    is_wished: true,
     category: "family",
-    wish_reason: null,
+    wish_reason: wishReason?.length ? wishReason : null,
     syncStatus: "pending",
   };
   await localDb.venues.add(venue);
