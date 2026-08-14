@@ -7,7 +7,16 @@ function toDateInputValue(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-test("「後から記録する」で過去日付を指定すると、その日付でVisitが作成され、登録画面でも修正できる", async ({
+function formatDateLabel(date: Date): string {
+  return date.toLocaleDateString("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+test("「名前で登録」で過去日付を指定すると、その日付でVisitが作成され、後から修正もできる", async ({
   page,
 }) => {
   const yesterday = new Date();
@@ -15,23 +24,21 @@ test("「後から記録する」で過去日付を指定すると、その日�
   const yesterdayValue = toDateInputValue(yesterday);
 
   await page.goto("/");
-  await page.getByRole("button", { name: "🕐 後から記録する" }).click();
+  await page.waitForSelector("#venue-search");
 
-  const backdateDialog = page.getByRole("alertdialog", { name: "後から記録する" });
-  await backdateDialog.getByPlaceholder("店名を入力").fill("E2E後から記録テスト店");
-  await backdateDialog.locator("#backdate-date").fill(yesterdayValue);
-  await backdateDialog.getByRole("button", { name: "登録する" }).click();
+  await page.fill("#venue-search", "E2E後から記録テスト店");
+  await page.fill("#named-register-date", yesterdayValue);
+  await page.getByText("「E2E後から記録テスト店」で新規チェックイン").click();
+  await expect(page.getByText("チェックインしました")).toBeVisible();
 
-  await expect(page).toHaveURL(/\/visits\/.+\/register/);
-  // 作成直後のVisitが「今日」ではなく指定した過去日付になっていることを確認する
-  // (回帰: visited_atがnew Date()に固定で丸められてしまうと今日の日付になる)。
-  await expect(page.locator("#visited-at")).toHaveValue(new RegExp(`^${yesterdayValue}`));
-
-  await page.getByRole("button", { name: "保存する" }).click();
-  await expect(page).toHaveURL(/\/timeline/);
-
+  await page.waitForTimeout(5500);
+  await page.goto("/timeline");
   await page.getByText("E2E後から記録テスト店").click();
   await expect(page).toHaveURL(/\/visits\/[^/]+$/);
+
+  // 作成直後のVisitが「今日」ではなく指定した過去日付になっていることを確認する
+  // (回帰: visited_atがnew Date()に固定で丸められてしまうと今日の日付になる)。
+  await expect(page.getByText(formatDateLabel(yesterday))).toBeVisible();
 
   // 既存Visitの日付を登録画面から修正できることも合わせて確認する
   // (以前はvisited_atが読み取り専用で、一切修正手段がなかった)。
@@ -47,11 +54,5 @@ test("「後から記録する」で過去日付を指定すると、その日�
 
   await page.getByText("E2E後から記録テスト店").click();
   await expect(page).toHaveURL(/\/visits\/[^/]+$/);
-  const expectedLabel = twoDaysAgo.toLocaleDateString("ja-JP", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  });
-  await expect(page.getByText(expectedLabel)).toBeVisible();
+  await expect(page.getByText(formatDateLabel(twoDaysAgo))).toBeVisible();
 });

@@ -14,32 +14,42 @@ async function venueIdFromVisitDetail(page: import("@playwright/test").Page, vis
   return href?.replace("/venues/", "");
 }
 
-test("同名の店舗が複数あっても検索結果のクリック先と紐付け先が一致する", async ({ page }) => {
-  // Venue A: 検索チェックインで作成
-  await page.goto("/");
-  await page.fill("#venue-search", "回帰テスト店");
-  await page.getByText("「回帰テスト店」で新規チェックイン").click();
-  await page.waitForURL(/\/visits\/.+\/register/);
-  const visitIdA = page.url().match(/visits\/([^/]+)\/register/)?.[1] as string;
-  await page.getByRole("button", { name: "保存する" }).click();
-  await expect(page).toHaveURL(/\/timeline/);
-  const venueIdA = await venueIdFromVisitDetail(page, visitIdA);
+// タイムラインは新しい順に並ぶため、直前に作成したVisitは常に同名の中で一番上に来る。
+async function latestVisitIdForVenueName(page: import("@playwright/test").Page, venueName: string) {
+  await page.goto("/timeline");
+  await page.getByText(venueName).first().click();
+  await page.waitForURL(/\/visits\/[^/]+$/);
+  return page.url().match(/visits\/([^/]+)$/)?.[1] as string;
+}
 
-  // Venue B: 瞬録(GPS)で作成後、同じ店名を設定
+test("同名の店舗が複数あっても検索結果のクリック先と紐付け先が一致する", async ({ page }) => {
+  // Venue A: 「名前で登録」から作成
   await page.goto("/");
   await page.waitForSelector("#venue-search");
-  await page.getByText("今ココを瞬録").click();
-  await page.getByRole("button", { name: "登録する" }).click();
+  await page.fill("#venue-search", "回帰テスト店");
+  await page.getByText("「回帰テスト店」で新規チェックイン").click();
   await expect(page.getByText("チェックインしました")).toBeVisible();
   await page.waitForTimeout(5500);
 
-  await page.goto("/timeline");
-  await page.locator('span:has-text("登録待ち")').first().click();
-  await page.waitForURL(/\/visits\/.+\/register/);
-  const visitIdB = page.url().match(/visits\/([^/]+)\/register/)?.[1] as string;
-  await page.fill("#venue-name", "回帰テスト店");
-  await page.getByRole("button", { name: "保存する" }).click();
-  await expect(page).toHaveURL(/\/timeline/);
+  const visitIdA = await latestVisitIdForVenueName(page, "回帰テスト店");
+  const venueIdA = await venueIdFromVisitDetail(page, visitIdA);
+
+  // Venue B: 「瞬録する」(GPS)で同じ店名を入力して作成
+  await page.goto("/");
+  await page.waitForSelector("#venue-search");
+  await page.getByText("瞬録する").click();
+  await page.getByRole("alertdialog", { name: "名前わかる？" }).waitFor();
+  await page.fill(
+    'input[placeholder="候補にない場合は入力(わからなければ空欄でOK)"]',
+    "回帰テスト店"
+  );
+  await page.getByRole("button", { name: "次へ" }).click();
+  await page.getByRole("alertdialog", { name: "写真を1枚" }).waitFor();
+  await page.getByRole("button", { name: "写真なしで登録" }).click();
+  await expect(page.getByText("チェックインしました")).toBeVisible();
+  await page.waitForTimeout(5500);
+
+  const visitIdB = await latestVisitIdForVenueName(page, "回帰テスト店");
   const venueIdB = await venueIdFromVisitDetail(page, visitIdB);
 
   expect(venueIdA).not.toBe(venueIdB);
@@ -48,13 +58,14 @@ test("同名の店舗が複数あっても検索結果のクリック先と紐�
   // (Dexieの.toArray()はUUID主キー順のため画面上の並び順は作成順と一致しない)
   // タップした店舗と紐付け先が一致することを確認する。
   await page.goto("/");
+  await page.waitForSelector("#venue-search");
   await page.fill("#venue-search", "回帰テスト店");
   const targetResult = page.locator(`button[data-venue-id="${venueIdB}"]`);
   await targetResult.click();
-  await page.waitForURL(/\/visits\/.+\/register/);
-  const visitIdC = page.url().match(/visits\/([^/]+)\/register/)?.[1] as string;
-  await page.getByRole("button", { name: "保存する" }).click();
-  await expect(page).toHaveURL(/\/timeline/);
+  await expect(page.getByText("チェックインしました")).toBeVisible();
+  await page.waitForTimeout(5500);
+
+  const visitIdC = await latestVisitIdForVenueName(page, "回帰テスト店");
   const venueIdC = await venueIdFromVisitDetail(page, visitIdC);
 
   expect(venueIdC).toBe(venueIdB);
