@@ -16,7 +16,7 @@ function formatDateLabel(date: Date): string {
   });
 }
 
-test("「名前で登録」で過去日付を指定すると、その日付でVisitが作成され、後から修正もできる", async ({
+test("「名前で記録」で過去日付を指定すると、その日付でVisitが作成され、後から修正もできる", async ({
   page,
 }) => {
   const yesterday = new Date();
@@ -24,7 +24,7 @@ test("「名前で登録」で過去日付を指定すると、その日付でVi
   const yesterdayValue = toDateInputValue(yesterday);
 
   await page.goto("/");
-  await page.waitForSelector("#venue-search");
+  await page.getByText("名前で記録").click();
 
   await page.fill("#venue-search", "E2E後から記録テスト店");
   await page.fill("#named-register-date", yesterdayValue);

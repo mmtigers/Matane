@@ -4,7 +4,7 @@ test("店名検索→即チェックイン→タイムライン反映→編集�
   page,
 }) => {
   await page.goto("/");
-  await page.waitForSelector("#venue-search");
+  await page.getByText("名前で記録").click();
 
   await page.fill("#venue-search", "E2Eテスト居酒屋");
   await page.getByText("「E2Eテスト居酒屋」で新規チェックイン").click();
@@ -17,7 +17,7 @@ test("店名検索→即チェックイン→タイムライン反映→編集�
   await page.getByText("E2Eテスト居酒屋").click();
   await expect(page).toHaveURL(/\/visits\/[^/]+$/);
 
-  // 名前で登録した記録も、後から登録画面でメモや誰と等を追記できる。
+  // 名前で記録した記録も、後から登録画面でメモや誰と等を追記できる。
   await page.getByRole("link", { name: "編集する" }).click();
   await expect(page).toHaveURL(/\/visits\/.+\/register/);
   await page.getByRole("button", { name: "友人", exact: true }).click();

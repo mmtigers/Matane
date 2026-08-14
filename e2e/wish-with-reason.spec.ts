@@ -8,6 +8,7 @@ test("店名を検索し、気になる理由タグを付けて保存すると�
 }) => {
   await page.goto("/");
 
+  await page.getByText("名前で記録").click();
   await page.fill("#venue-search", "E2E行きたいテスト店");
   await page.getByRole("button", { name: "☆ 気になるに保存" }).click();
 
