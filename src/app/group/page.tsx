@@ -72,12 +72,13 @@ export default function GroupPage() {
     return () => clearTimeout(timer);
   }, [shareCopied]);
 
-  // createGroup()自体は成功したのに直後のcreateInvite()だけがネットワーク瞬断等で
-  // 失敗すると、group/membersのstateを更新しないまま「作成に失敗しました」を
-  // 出してしまい、実際にはグループができているのに画面上は再作成しか選べない
-  // (再実行するとgroup_members.user_idのunique制約で必ず失敗する)状態になっていた。
-  // グループ作成が成功した時点でstateを確定させ、招待コード発行の失敗は
-  // 「発行し直せる」別の状態として扱う。
+  // createGroup()自体は成功したのに直後のgetGroupMembers()/createInvite()だけが
+  // ネットワーク瞬断等で失敗すると、group/membersのstateを更新しないまま
+  // 「作成に失敗しました」を出してしまい、実際にはグループができているのに画面上は
+  // 再作成しか選べない(再実行するとgroup_members.user_idのunique制約で必ず失敗する)
+  // 詰み状態になっていた。グループ作成(groups+group_membersへのinsert)が成功した
+  // 時点でstateを確定させ、以降のメンバー一覧取得・招待コード発行の失敗は
+  // 「グループ作成の失敗」とは別の(発行し直せる)状態として扱う。
   async function handleCreateGroup() {
     setErrorMessage(null);
     setCreating(true);
@@ -85,12 +86,16 @@ export default function GroupPage() {
     try {
       newGroup = await createGroup();
       setGroup(newGroup);
-      setMembers(await getGroupMembers());
     } catch (error) {
       console.error(error);
       setErrorMessage("グループの作成に失敗しました");
       setCreating(false);
       return;
+    }
+    try {
+      setMembers(await getGroupMembers());
+    } catch (error) {
+      console.error(error);
     }
     try {
       setInvite(await createInvite(newGroup.id));
