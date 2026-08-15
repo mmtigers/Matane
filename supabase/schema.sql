@@ -154,6 +154,37 @@ create policy "group_members are deletable by themselves"
   to authenticated
   using (user_id = auth.uid());
 
+-- グループ作成(groups行の追加 + 作成者自身をgroup_membersに追加)を1つのトランザクションで
+-- 行うSECURITY DEFINER関数。クライアント側で2回に分けてinsertすると、1回目(groups)は
+-- 成功したが2回目(group_members)がネットワーク瞬断や二重送信等で失敗した場合に
+-- 「groups行だけが残るが所属は未確定」という中途半端な状態が生まれる。getMyGroup()は
+-- group_membersを見て所属を判定するため、この状態では未所属のまま扱われて画面には
+-- 常に「グループを作る」しか出せず、再実行しても孤立groups行が増えるだけで直らない
+-- 詰みになっていた。redeem_group_invite()と同様にアトミックにまとめることで防ぐ。
+create or replace function create_group()
+returns groups
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group groups%rowtype;
+begin
+  if exists (select 1 from group_members where user_id = auth.uid()) then
+    raise exception 'already_in_group';
+  end if;
+
+  insert into groups (created_by) values (auth.uid())
+  returning * into v_group;
+
+  insert into group_members (group_id, user_id) values (v_group.id, auth.uid());
+
+  return v_group;
+end;
+$$;
+
+grant execute on function create_group() to authenticated;
+
 -- group_invites: 自グループのメンバーのみ閲覧・発行可能。招待コードの照合・消費は
 -- (未所属ユーザーからも呼べる必要があるため)RLSではなくredeem_group_invite()で行う。
 create policy "group_invites are readable by group members"

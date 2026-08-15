@@ -37,23 +37,22 @@ export async function getMyGroup(): Promise<Group | null> {
 }
 
 // グループを新規作成し、作成者自身を最初のメンバーとして追加する。
+// groups行の追加とgroup_membersへの追加はcreate_group() (SECURITY DEFINER、DB側)で
+// アトミックに行う。クライアント側で2回に分けてinsertすると、1回目が成功し2回目が
+// ネットワーク瞬断や二重送信等で失敗した場合に孤立したgroups行が残り、getMyGroup()から
+// は未所属のまま見えて再作成しかできない詰み状態になってしまうため。
 export async function createGroup(): Promise<Group> {
   const supabase = getSupabaseClient();
-  const userId = await requireUserId();
+  await requireUserId();
 
-  const { data: group, error: groupError } = await supabase
-    .from("groups")
-    .insert({ created_by: userId })
-    .select()
-    .single();
-  if (groupError) throw groupError;
-
-  const { error: memberError } = await supabase
-    .from("group_members")
-    .insert({ group_id: group.id, user_id: userId });
-  if (memberError) throw memberError;
-
-  return group as Group;
+  const { data, error } = await supabase.rpc("create_group");
+  if (error) {
+    if (error.message?.includes("already_in_group")) {
+      throw new Error("既にグループに所属しています");
+    }
+    throw error;
+  }
+  return data as Group;
 }
 
 // 既存の未使用・期限内の招待コードがあれば返す(設定画面での併記用)。
