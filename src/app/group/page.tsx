@@ -61,7 +61,8 @@ export default function GroupPage() {
     refresh()
       .catch((error) => {
         console.error(error);
-        setErrorMessage("グループ情報の取得に失敗しました");
+        const detail = error instanceof Error ? error.message : String(error);
+        setErrorMessage(`グループ情報の取得に失敗しました(${detail})`);
       })
       .finally(() => setLoading(false));
   }, [authLoading, session, refresh]);
