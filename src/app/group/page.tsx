@@ -80,6 +80,7 @@ export default function GroupPage() {
   // 時点でstateを確定させ、以降のメンバー一覧取得・招待コード発行の失敗は
   // 「グループ作成の失敗」とは別の(発行し直せる)状態として扱う。
   async function handleCreateGroup() {
+    if (creating) return;
     setErrorMessage(null);
     setCreating(true);
     let newGroup: Group;
@@ -88,7 +89,7 @@ export default function GroupPage() {
       setGroup(newGroup);
     } catch (error) {
       console.error(error);
-      setErrorMessage("グループの作成に失敗しました");
+      setErrorMessage(error instanceof Error ? error.message : "グループの作成に失敗しました");
       setCreating(false);
       return;
     }
