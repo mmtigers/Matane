@@ -9,15 +9,21 @@ import {
   getPriorityDestinationId,
   withCommuteOverrides,
 } from "@/config/commute";
+import { PartnerAvatar } from "@/components/PartnerAvatar";
 import { Skeleton } from "@/components/Skeleton";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { loadCommuteOverrides } from "@/lib/commuteSettings";
 import { toggleVenueWish } from "@/lib/db/checkin";
+import { buildMemberEmailMap, isOwnVisit, useGroupMembers } from "@/lib/db/groups";
 import { useVenue, useVisitsForVenue } from "@/lib/db/queries";
 import { googleMapsUrl } from "@/lib/geo";
 
 export function VenueDetailClient({ venueId }: { venueId: string }) {
   const venue = useVenue(venueId);
   const visits = useVisitsForVenue(venueId);
+  const { session, loading: authLoading } = useAuth();
+  const groupMembers = useGroupMembers();
+  const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
   const [now, setNow] = useState(() => new Date());
   const [shareCopied, setShareCopied] = useState(false);
   // 設定画面での上書きはlocalStorageに保存されておりSSR時点では読めないため、
@@ -123,11 +129,15 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
         ) : (
           <ul className="flex flex-col gap-3">
             {visits.map((visit) => {
+              const isOwn = isOwnVisit(visit, session?.user.id, authLoading);
               const content = (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">
+                    <span className="flex items-center gap-1.5 text-sm font-medium">
                       {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
+                      {!isOwn && (
+                        <PartnerAvatar email={memberEmailById.get(visit.user_id ?? "")} />
+                      )}
                     </span>
                     {!visit.is_completed && (
                       <span className="text-xs text-amber-600">登録待ち</span>

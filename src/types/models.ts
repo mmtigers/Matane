@@ -36,4 +36,40 @@ export interface Visit {
   best_photo: string | null;
   memo: string | null;
   ai_tags: string[];
+  // クラウド未同期のうちは未設定(=自分の記録として扱う)。同期・pull後はSupabaseの
+  // user_idが入り、パートナーの記録かどうかの判定(グループ共有機能)に使う。
+  user_id?: string | null;
+}
+
+// 場所・訪問記録を共有する単位(夫婦・家族を想定)。1ユーザーは同時に1グループのみ所属可能。
+export interface Group {
+  id: string;
+  name: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface GroupMember {
+  group_id: string;
+  user_id: string;
+  joined_at: string;
+}
+
+// グループ設定画面でのメンバー表示用。auth.usersのemailはSECURITY DEFINER関数
+// (get_group_members)経由でのみ取得できる。
+export interface GroupMemberProfile {
+  user_id: string;
+  email: string | null;
+  joined_at: string;
+}
+
+export interface GroupInvite {
+  id: string;
+  group_id: string;
+  code: string;
+  created_by: string;
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
+  created_at: string;
 }

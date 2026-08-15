@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { commuteDestinations } from "@/config/commute";
 import {
@@ -96,6 +97,19 @@ export default function SettingsPage() {
       <header>
         <h1 className="text-lg font-bold">設定</h1>
       </header>
+
+      <section className="flex flex-col gap-3 rounded-2xl bg-neutral-100 p-4">
+        <h2 className="text-sm font-semibold text-neutral-600">👨‍👩‍👧 グループ共有</h2>
+        <p className="text-xs text-neutral-500">
+          夫婦・家族とVisits・気になるリストを共有できます。
+        </p>
+        <Link
+          href="/group"
+          className="rounded-full bg-neutral-200 py-3 text-center text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
+        >
+          グループ設定を開く
+        </Link>
+      </section>
 
       <section className="flex flex-col gap-3 rounded-2xl bg-neutral-100 p-4">
         <h2 className="text-sm font-semibold text-neutral-600">🚃 終電・帰宅アラート</h2>
