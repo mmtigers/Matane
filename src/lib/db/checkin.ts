@@ -244,6 +244,7 @@ export async function restoreVisit(visit: LocalVisit) {
     best_photo,
     memo,
     ai_tags,
+    user_id,
     syncStatus,
   } = visit;
   await localDb.visits.add({
@@ -259,6 +260,7 @@ export async function restoreVisit(visit: LocalVisit) {
     best_photo,
     memo,
     ai_tags,
+    user_id,
     syncStatus,
   });
 

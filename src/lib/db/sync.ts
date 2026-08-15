@@ -171,6 +171,7 @@ function fromVisitRecord(row: CloudVisitRow): LocalVisit {
     best_photo,
     memo,
     ai_tags,
+    user_id,
   } = row;
   return {
     id,
@@ -185,6 +186,7 @@ function fromVisitRecord(row: CloudVisitRow): LocalVisit {
     best_photo,
     memo,
     ai_tags,
+    user_id,
     syncStatus: "synced",
   };
 }
@@ -305,6 +307,10 @@ export async function syncPendingChanges() {
 // データや、この端末のIndexedDBが空になった場合(再インストール等)の復元に使う。
 // ローカルにまだ送信していない変更(syncStatus: "pending")がある行は、クラウドの
 // 古い値で上書きしないようスキップする。
+//
+// visits/venuesのSELECTポリシーは自分自身に加えて同じグループのメンバーの行も
+// 返すため、user_idでの絞り込みは行わずRLSに委ねる(グループメンバーのVisits/
+// 気になるリストを含むVenuesもまとめてDexieへミラーするため)。
 export async function pullFromCloud() {
   if (pulling) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
@@ -316,30 +322,22 @@ export async function pullFromCloud() {
     const userId = userData.user?.id;
     if (!userId) return;
 
-    const { data: remoteVisits, error: visitsError } = await supabase
-      .from("visits")
-      .select("*")
-      .eq("user_id", userId);
+    const { data: remoteVisits, error: visitsError } = await supabase.from("visits").select("*");
 
     if (visitsError) {
       console.warn("visitsのpullに失敗しました:", visitsError);
       return;
     }
 
-    const venueIds = [...new Set((remoteVisits ?? []).map((v) => v.venue_id as string))];
-    let remoteVenues: CloudVenueRow[] = [];
-    if (venueIds.length > 0) {
-      const { data, error: venuesError } = await supabase
-        .from("venues")
-        .select("*")
-        .in("id", venueIds);
+    // Visitに紐付くVenueだけでなく、訪問記録のない気になるリスト単独のVenueも
+    // グループ内で共有するため、venue_idでの絞り込みはせずまるごとpullする。
+    const { data: venuesData, error: venuesError } = await supabase.from("venues").select("*");
 
-      if (venuesError) {
-        console.warn("venuesのpullに失敗しました:", venuesError);
-        return;
-      }
-      remoteVenues = (data ?? []) as CloudVenueRow[];
+    if (venuesError) {
+      console.warn("venuesのpullに失敗しました:", venuesError);
+      return;
     }
+    const remoteVenues = (venuesData ?? []) as CloudVenueRow[];
 
     // ローカルで削除済み・削除待ちのVisitをpullで復活させないようにする。
     const pendingDeleteIds = new Set(
@@ -357,6 +355,29 @@ export async function pullFromCloud() {
       const local = await localDb.visits.get(row.id);
       if (local?.syncStatus === "pending") continue;
       await localDb.visits.put(fromVisitRecord(row));
+    }
+
+    // クラウド側(RLS)からもう見えなくなったVisit/Venueをローカルからも削除する。
+    // グループ脱退・相手による削除・別端末での削除などで可視範囲から外れた記録が
+    // この端末にだけ残り続けるのを防ぐ(要件定義書7章のグループ解除フロー)。
+    // 未同期(pending)の行は自分自身のローカル変更のため対象外にする。
+    const remoteVisitIds = new Set((remoteVisits ?? []).map((v) => v.id as string));
+    const staleVisits = (
+      await localDb.visits.where("syncStatus").equals("synced").toArray()
+    ).filter((v) => !remoteVisitIds.has(v.id));
+    if (staleVisits.length > 0) {
+      await localDb.visits.bulkDelete(staleVisits.map((v) => v.id));
+    }
+
+    // Visitの削除でvenue_idの参照が変わっている可能性があるため、Venueの棚卸しは
+    // Visitの棚卸し後に行う。
+    const remoteVenueIds = new Set(remoteVenues.map((v) => v.id));
+    const referencedVenueIds = new Set((await localDb.visits.toArray()).map((v) => v.venue_id));
+    const staleVenues = (
+      await localDb.venues.where("syncStatus").equals("synced").toArray()
+    ).filter((v) => !remoteVenueIds.has(v.id) && !referencedVenueIds.has(v.id));
+    if (staleVenues.length > 0) {
+      await localDb.venues.bulkDelete(staleVenues.map((v) => v.id));
     }
   } catch (error) {
     console.warn("Supabaseからの取り込みをスキップしました:", error);
