@@ -19,6 +19,20 @@ import type { Group, GroupInvite, GroupMemberProfile } from "@/types/models";
 
 const SHARE_COPIED_VISIBLE_MS = 2000;
 
+// supabase-jsはHTTPレベルのエラー(PostgrestError等、Errorのサブクラス)だけでなく、
+// fetch自体が失敗した場合(DNS/CORS/オフライン等)は素のオブジェクト
+// { message, name, ... } を投げてくる。instanceof Errorだけで判定すると
+// このケースを取りこぼしString(error)が"[object Object]"になってしまうため、
+// messageプロパティの有無でも判定する。
+function describeError(error: unknown): string | null {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return null;
+}
+
 export default function GroupPage() {
   const { session, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -61,8 +75,10 @@ export default function GroupPage() {
     refresh()
       .catch((error) => {
         console.error(error);
-        const detail = error instanceof Error ? error.message : String(error);
-        setErrorMessage(`グループ情報の取得に失敗しました(${detail})`);
+        const detail = describeError(error);
+        setErrorMessage(
+          detail ? `グループ情報の取得に失敗しました(${detail})` : "グループ情報の取得に失敗しました"
+        );
       })
       .finally(() => setLoading(false));
   }, [authLoading, session, refresh]);
@@ -90,7 +106,7 @@ export default function GroupPage() {
       setGroup(newGroup);
     } catch (error) {
       console.error(error);
-      setErrorMessage(error instanceof Error ? error.message : "グループの作成に失敗しました");
+      setErrorMessage(describeError(error) ?? "グループの作成に失敗しました");
       setCreating(false);
       return;
     }
@@ -119,7 +135,7 @@ export default function GroupPage() {
       setJoinCodeInput("");
     } catch (error) {
       console.error(error);
-      setErrorMessage(error instanceof Error ? error.message : "参加に失敗しました");
+      setErrorMessage(describeError(error) ?? "参加に失敗しました");
       setJoining(false);
       return;
     }
