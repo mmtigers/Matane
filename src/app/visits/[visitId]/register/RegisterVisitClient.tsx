@@ -33,7 +33,7 @@ const VENUE_NAME_MAX_LENGTH = 100;
 
 export function RegisterVisitClient({ visitId }: { visitId: string }) {
   const visit = useVisitWithVenue(visitId);
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const router = useRouter();
   const initialized = useRef(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -183,7 +183,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
 
   // パートナー(自分以外のグループメンバー)の記録は編集不可。直接URLでの
   // 到達に備えたガードで、実際のクラウド保存もRLS(UPDATE=本人のみ)側で拒否される。
-  if (!isOwnVisit(visit, session?.user.id)) {
+  if (!isOwnVisit(visit, session?.user.id, authLoading)) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 px-4 pt-8">
         <p className="text-sm text-neutral-600">パートナーの記録は編集できません。</p>

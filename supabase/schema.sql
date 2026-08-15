@@ -75,7 +75,10 @@ create table if not exists group_invites (
   group_id uuid not null references groups(id) on delete cascade,
   code text not null unique,
   created_by uuid references auth.users(id),
-  expires_at timestamptz not null,
+  -- クライアントに委ねずDB側で24時間後をデフォルト算出する(下のINSERTポリシーの
+  -- with checkでも上限を強制し、クライアントが明示的にexpires_atを指定して
+  -- 24時間を超える有効期限を偽装できないようにする)。
+  expires_at timestamptz not null default (now() + interval '24 hours'),
   used_at timestamptz,
   used_by uuid references auth.users(id),
   created_at timestamptz not null default now()
@@ -109,17 +112,11 @@ create policy "groups are insertable by their creator"
   to authenticated
   with check (created_by = auth.uid());
 
--- グループ名編集(オープンイシュー、将来UI追加用)に備えてメンバーに書き込みを許可しておく。
--- 現状のUIからは呼び出されない。
-create policy "groups are updatable by members"
-  on groups for update
-  to authenticated
-  using (
-    exists (
-      select 1 from group_members gm
-      where gm.group_id = groups.id and gm.user_id = auth.uid()
-    )
-  );
+-- groups のUPDATEポリシーは現状意図的に用意していない(=デフォルト拒否)。
+-- 「メンバーなら更新可」だけをusingにしwith checkを省略すると(=usingがwith checkにも
+-- 使われる)、created_byを任意の他ユーザーIDへ書き換えられてしまい、SELECTポリシーの
+-- 「created_by = auth.uid()」経由でそのユーザーにgroups行(name等)を覗き見させられる
+-- 抜け道になるため、現状のUIで使わない以上は追加しない。
 
 -- group_members: 自分の所属グループのメンバー一覧を閲覧可能。
 create policy "group_members are readable by fellow members"
@@ -174,6 +171,11 @@ create policy "group_invites are insertable by group members"
   to authenticated
   with check (
     created_by = auth.uid()
+    -- expires_atのデフォルト値はクライアントが明示的に値を指定すると上書きされて
+    -- しまうため、ここでも「発行から24時間+時計ずれ許容5分」を超えられないよう
+    -- サーバー側で二重に強制する(悪意あるクライアントが無期限に近い招待コードを
+    -- 発行することを防ぐ)。
+    and expires_at <= now() + interval '24 hours' + interval '5 minutes'
     and exists (
       select 1 from group_members gm
       where gm.group_id = group_invites.group_id and gm.user_id = auth.uid()
@@ -271,7 +273,11 @@ create policy "venues are insertable by authenticated users"
 -- 同じ実店舗(同じGoogle place_id)にグループ内の別メンバーが後からチェックインして
 -- Venueを再利用するケースがあるため、updateもselectと同じ範囲(作成者+同じグループ)に
 -- 開放する(そうしないと作成者以外が店名修正や「行きたい」トグルをした際にRLSで弾かれ、
--- syncStatusが永久にpendingのまま残ってしまう)。
+-- syncStatusが永久にpendingのまま残ってしまう)。with checkはusingと同じ条件にし、
+-- with check(true)にはしない: trueにすると悪意あるメンバーがcreated_byを
+-- グループ外の第三者IDへ書き換えられてしまい(venues.created_by=そのユーザーIDにより
+-- Venueがグループの可視範囲外へ実質的に持ち出される/汚染される)、usingと揃えることで
+-- created_byの書き換え先も「自分または同じグループのメンバー」の範囲に閉じる。
 create policy "venues are updatable by creator or group members"
   on venues for update
   to authenticated
@@ -285,7 +291,16 @@ create policy "venues are updatable by creator or group members"
         and gm_owner.user_id = venues.created_by
     )
   )
-  with check (true);
+  with check (
+    created_by = auth.uid()
+    or exists (
+      select 1
+      from group_members gm_self
+      join group_members gm_owner on gm_owner.group_id = gm_self.group_id
+      where gm_self.user_id = auth.uid()
+        and gm_owner.user_id = venues.created_by
+    )
+  );
 
 -- Visits は本人 + 同じグループのメンバーのVisitsを閲覧可能。編集・削除は本人のみ。
 -- 既存環境向けマイグレーション: 旧ポリシー(本人のみ)が残っていれば削除する。

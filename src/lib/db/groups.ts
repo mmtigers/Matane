@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Group, GroupInvite, GroupMemberProfile } from "@/types/models";
 
 // 紛らわしい文字(0/O, 1/I/L)を除いた招待コード用アルファベット。手入力・音声共有を想定。
 const INVITE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const INVITE_CODE_LENGTH = 8;
-const INVITE_EXPIRES_MS = 1000 * 60 * 60 * 24;
 
 function generateInviteCode(): string {
   const bytes = new Uint8Array(INVITE_CODE_LENGTH);
@@ -73,6 +73,9 @@ export async function getActiveInvite(groupId: string): Promise<GroupInvite | nu
 }
 
 // 新しい招待コードを発行する(24時間後に失効)。既存メンバーなら誰でも発行可能。
+// expires_atはクライアントから送らずDB側のdefault(now() + 24時間)に委ねる
+// (クライアントに委ねると、悪意あるクライアントが24時間を超える有効期限を
+// 送りつけてくる余地が生まれるため。DB側のINSERTポリシーでも上限を強制している)。
 export async function createInvite(groupId: string): Promise<GroupInvite> {
   const supabase = getSupabaseClient();
   const userId = await requireUserId();
@@ -82,7 +85,6 @@ export async function createInvite(groupId: string): Promise<GroupInvite> {
       group_id: groupId,
       code: generateInviteCode(),
       created_by: userId,
-      expires_at: new Date(Date.now() + INVITE_EXPIRES_MS).toISOString(),
     })
     .select()
     .single();
@@ -130,10 +132,21 @@ export async function getGroupMembers(): Promise<GroupMemberProfile[]> {
 
 // タイムライン・店舗詳細で「誰の記録か」を表示するための軽量フック。
 // グループに所属していない場合は空配列を返す(RPCがRLS経由で自然に0件になる)。
+// AuthProviderのセッション復元(ページ再読み込み直後は非同期)を待ってから叩く。
+// マウント直後の未認証状態で即座に叩いてしまうと権限エラーで空配列が確定し、
+// 依存配列が空のままではセッション復元後も再取得されず「グループに入っている
+// はずなのにパートナー表示が出ない」状態が残ってしまうため。
 export function useGroupMembers(): GroupMemberProfile[] | null {
+  const { session, loading } = useAuth();
   const [members, setMembers] = useState<GroupMemberProfile[] | null>(null);
 
   useEffect(() => {
+    if (loading) return;
+    if (!session) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 未ログイン確定後に一度だけ空配列を確定させる後始末で、フェッチ自体は発生しない
+      setMembers([]);
+      return;
+    }
     let active = true;
     getGroupMembers()
       .then((data) => {
@@ -145,16 +158,21 @@ export function useGroupMembers(): GroupMemberProfile[] | null {
     return () => {
       active = false;
     };
-  }, []);
+  }, [loading, session]);
 
   return members;
 }
 
 // user_id未設定(=クラウド未同期の自分の新規記録)は常に自分の記録として扱う。
+// authLoadingがtrueの間(セッション復元中)は、自分自身の同期済みVisitまで一時的に
+// 「パートナーの記録」と誤判定して編集・削除ボタンが消えてしまうのを避けるため、
+// 判定を保留して常に自分の記録として扱う(復元完了後の再レンダーで正しく再判定される)。
 export function isOwnVisit(
   visit: { user_id?: string | null },
-  currentUserId: string | null | undefined
+  currentUserId: string | null | undefined,
+  authLoading?: boolean
 ): boolean {
+  if (authLoading) return true;
   return !visit.user_id || visit.user_id === currentUserId;
 }
 

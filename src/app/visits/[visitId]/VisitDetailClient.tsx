@@ -23,7 +23,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export function VisitDetailClient({ visitId }: { visitId: string }) {
   const visit = useVisitWithVenue(visitId);
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const groupMembers = useGroupMembers();
   const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
   const router = useRouter();
@@ -68,7 +68,7 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
 
   const visitDate = new Date(visit.visited_at);
   const isFamily = visit.venue?.category === "family";
-  const isOwn = isOwnVisit(visit, session?.user.id);
+  const isOwn = isOwnVisit(visit, session?.user.id, authLoading);
   const ownerEmail = memberEmailById.get(visit.user_id ?? "");
 
   return (

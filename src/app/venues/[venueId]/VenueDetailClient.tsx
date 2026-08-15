@@ -21,7 +21,7 @@ import { googleMapsUrl } from "@/lib/geo";
 export function VenueDetailClient({ venueId }: { venueId: string }) {
   const venue = useVenue(venueId);
   const visits = useVisitsForVenue(venueId);
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const groupMembers = useGroupMembers();
   const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
   const [now, setNow] = useState(() => new Date());
@@ -129,7 +129,7 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
         ) : (
           <ul className="flex flex-col gap-3">
             {visits.map((visit) => {
-              const isOwn = isOwnVisit(visit, session?.user.id);
+              const isOwn = isOwnVisit(visit, session?.user.id, authLoading);
               const content = (
                 <>
                   <div className="flex items-center justify-between">

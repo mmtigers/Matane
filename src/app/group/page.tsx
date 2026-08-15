@@ -72,18 +72,33 @@ export default function GroupPage() {
     return () => clearTimeout(timer);
   }, [shareCopied]);
 
+  // createGroup()自体は成功したのに直後のcreateInvite()だけがネットワーク瞬断等で
+  // 失敗すると、group/membersのstateを更新しないまま「作成に失敗しました」を
+  // 出してしまい、実際にはグループができているのに画面上は再作成しか選べない
+  // (再実行するとgroup_members.user_idのunique制約で必ず失敗する)状態になっていた。
+  // グループ作成が成功した時点でstateを確定させ、招待コード発行の失敗は
+  // 「発行し直せる」別の状態として扱う。
   async function handleCreateGroup() {
     setErrorMessage(null);
     setCreating(true);
+    let newGroup: Group;
     try {
-      const newGroup = await createGroup();
-      const newInvite = await createInvite(newGroup.id);
+      newGroup = await createGroup();
       setGroup(newGroup);
-      setInvite(newInvite);
       setMembers(await getGroupMembers());
     } catch (error) {
       console.error(error);
       setErrorMessage("グループの作成に失敗しました");
+      setCreating(false);
+      return;
+    }
+    try {
+      setInvite(await createInvite(newGroup.id));
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(
+        "グループを作成しましたが、招待コードの発行に失敗しました。下のボタンから発行し直してください"
+      );
     } finally {
       setCreating(false);
     }
@@ -95,11 +110,19 @@ export default function GroupPage() {
     try {
       await joinGroupByCode(joinCodeInput);
       setJoinCodeInput("");
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error instanceof Error ? error.message : "参加に失敗しました");
+      setJoining(false);
+      return;
+    }
+    // 参加自体(redeem_group_invite)は成功しているため、この後のrefresh失敗は
+    // 致命的なエラーとして表示しない(画面再訪問・次回起動時に復旧する)。
+    try {
       await refresh();
       void pullFromCloud();
     } catch (error) {
       console.error(error);
-      setErrorMessage(error instanceof Error ? error.message : "参加に失敗しました");
     } finally {
       setJoining(false);
     }

@@ -46,7 +46,7 @@ function groupByMonth(visits: VisitWithVenue[]): MonthGroup[] {
 
 export default function TimelinePage() {
   const visits = useTimelineVisits();
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const groupMembers = useGroupMembers();
   const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
   // 直前に選んでいたお酒フィルターをセッション内で覚えておき、画面を出入りするたびに
@@ -211,7 +211,7 @@ export default function TimelinePage() {
                 </h2>
                 <ul className="flex flex-col gap-2">
                   {group.visits.map((visit) => {
-                    const isOwn = isOwnVisit(visit, session?.user.id);
+                    const isOwn = isOwnVisit(visit, session?.user.id, authLoading);
                     return (
                       <li
                         key={visit.id}
