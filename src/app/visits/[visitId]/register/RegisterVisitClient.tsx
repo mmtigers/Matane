@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { ChoiceChips } from "@/components/ChoiceChips";
@@ -19,6 +20,7 @@ import {
 } from "@/constants/choices";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { completeVisitRegistration, setVenueName } from "@/lib/db/checkin";
+import { isOwnVisit } from "@/lib/db/groups";
 import { useVisitWithVenue } from "@/lib/db/queries";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/datetimeLocal";
 import { type PlaceCandidate, searchNearbyVenues } from "@/lib/places";
@@ -175,6 +177,22 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-10 w-full" />
+      </main>
+    );
+  }
+
+  // パートナー(自分以外のグループメンバー)の記録は編集不可。直接URLでの
+  // 到達に備えたガードで、実際のクラウド保存もRLS(UPDATE=本人のみ)側で拒否される。
+  if (!isOwnVisit(visit, session?.user.id)) {
+    return (
+      <main className="mx-auto flex max-w-md flex-col gap-4 px-4 pt-8">
+        <p className="text-sm text-neutral-600">パートナーの記録は編集できません。</p>
+        <Link
+          href={`/visits/${visitId}`}
+          className="rounded-full bg-neutral-200 py-3 text-center text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
+        >
+          記録に戻る
+        </Link>
       </main>
     );
   }

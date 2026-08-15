@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { PartnerAvatar } from "@/components/PartnerAvatar";
 import { Skeleton } from "@/components/Skeleton";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { deleteVisit } from "@/lib/db/checkin";
+import { buildMemberEmailMap, isOwnVisit, useGroupMembers } from "@/lib/db/groups";
 import { useVisitWithVenue } from "@/lib/db/queries";
 import { googleMapsUrl, osmEmbedUrl } from "@/lib/geo";
 
@@ -20,6 +23,9 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export function VisitDetailClient({ visitId }: { visitId: string }) {
   const visit = useVisitWithVenue(visitId);
+  const { session } = useAuth();
+  const groupMembers = useGroupMembers();
+  const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -62,6 +68,8 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
 
   const visitDate = new Date(visit.visited_at);
   const isFamily = visit.venue?.category === "family";
+  const isOwn = isOwnVisit(visit, session?.user.id);
+  const ownerEmail = memberEmailById.get(visit.user_id ?? "");
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 px-4 pt-6">
@@ -71,13 +79,19 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
             {visit.venue.name || "店名未設定"}
           </Link>
         )}
-        <p className="mt-1 text-xs text-neutral-600">
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-neutral-600">
           {visitDate.toLocaleDateString("ja-JP", {
             year: "numeric",
             month: "long",
             day: "numeric",
             weekday: "short",
           })}
+          {!isOwn && (
+            <>
+              <PartnerAvatar email={ownerEmail} />
+              <span>{ownerEmail ? `${ownerEmail}の記録` : "パートナーの記録"}</span>
+            </>
+          )}
         </p>
       </header>
 
@@ -132,22 +146,24 @@ export function VisitDetailClient({ visitId }: { visitId: string }) {
         </section>
       )}
 
-      <div className="flex gap-3">
-        <Link
-          href={`/visits/${visit.id}/register`}
-          className="flex-1 rounded-full bg-neutral-200 py-3 text-center text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
-        >
-          編集する
-        </Link>
-        <button
-          type="button"
-          onClick={() => setConfirmingDelete(true)}
-          disabled={deleting}
-          className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-red-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
-        >
-          {deleting ? "削除中..." : "削除する"}
-        </button>
-      </div>
+      {isOwn && (
+        <div className="flex gap-3">
+          <Link
+            href={`/visits/${visit.id}/register`}
+            className="flex-1 rounded-full bg-neutral-200 py-3 text-center text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
+          >
+            編集する
+          </Link>
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            disabled={deleting}
+            className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-red-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+          >
+            {deleting ? "削除中..." : "削除する"}
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmingDelete}

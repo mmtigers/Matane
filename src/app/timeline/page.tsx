@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ALCOHOL_ICONS, ALCOHOL_OPTIONS, type AlcoholTag } from "@/constants/choices";
+import { PartnerAvatar } from "@/components/PartnerAvatar";
 import { SkeletonList } from "@/components/Skeleton";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { estimateAverageBudget } from "@/lib/budget";
 import { deleteVisit, restoreVisit } from "@/lib/db/checkin";
+import { buildMemberEmailMap, isOwnVisit, useGroupMembers } from "@/lib/db/groups";
 import { useTimelineVisits, type VisitWithVenue } from "@/lib/db/queries";
 import { SAVED_TOAST_KEY } from "@/lib/sessionFlags";
 import { formatMonthLabel, monthKey } from "@/lib/time";
@@ -43,6 +46,9 @@ function groupByMonth(visits: VisitWithVenue[]): MonthGroup[] {
 
 export default function TimelinePage() {
   const visits = useTimelineVisits();
+  const { session } = useAuth();
+  const groupMembers = useGroupMembers();
+  const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
   // 直前に選んでいたお酒フィルターをセッション内で覚えておき、画面を出入りするたびに
   // 選び直さなくて済むようにする(端末再起動やタブを閉じれば自然にリセットされる)。
   // sessionStorageはSSR側で読めないため、初期値はSSRと揃えてnullにし、マウント後の
@@ -204,57 +210,65 @@ export default function TimelinePage() {
                   {avgBudget !== null && ` / 平均¥${avgBudget.toLocaleString("ja-JP")}`}）
                 </h2>
                 <ul className="flex flex-col gap-2">
-                  {group.visits.map((visit) => (
-                    <li
-                      key={visit.id}
-                      className="flex items-center gap-2 rounded-xl bg-neutral-100 px-4 py-3"
-                    >
-                      <Link
-                        href={
-                          visit.is_completed
-                            ? `/visits/${visit.id}`
-                            : `/visits/${visit.id}/register`
-                        }
-                        className="flex flex-1 items-center gap-3 min-w-0"
+                  {group.visits.map((visit) => {
+                    const isOwn = isOwnVisit(visit, session?.user.id);
+                    return (
+                      <li
+                        key={visit.id}
+                        className="flex items-center gap-2 rounded-xl bg-neutral-100 px-4 py-3"
                       >
-                        <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-lg bg-neutral-200 text-lg">
-                          {visit.best_photo ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- ローカルdata URLサムネイル
-                            <img
-                              src={visit.best_photo}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : visit.alcohol_tags.length > 0 ? (
-                            ALCOHOL_ICONS[visit.alcohol_tags[0]]
-                          ) : (
-                            "🏮"
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">
-                            {visit.venue?.name || "店名未設定"}
-                            {!visit.is_completed && (
-                              <span className="ml-2 text-xs text-amber-600">登録待ち</span>
+                        <Link
+                          href={
+                            visit.is_completed
+                              ? `/visits/${visit.id}`
+                              : `/visits/${visit.id}/register`
+                          }
+                          className="flex flex-1 items-center gap-3 min-w-0"
+                        >
+                          <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-lg bg-neutral-200 text-lg">
+                            {visit.best_photo ? (
+                              // eslint-disable-next-line @next/next/no-img-element -- ローカルdata URLサムネイル
+                              <img
+                                src={visit.best_photo}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : visit.alcohol_tags.length > 0 ? (
+                              ALCOHOL_ICONS[visit.alcohol_tags[0]]
+                            ) : (
+                              "🏮"
                             )}
-                          </p>
-                          <p className="text-xs text-neutral-600">
-                            {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
-                            {visit.alcohol_tags.length > 0 &&
-                              ` ・ ${visit.alcohol_tags.join("/")}`}
-                          </p>
-                        </div>
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(visit)}
-                        aria-label="削除"
-                        className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-neutral-600 focus:ring-2 focus:ring-amber-400 active:bg-neutral-200"
-                      >
-                        🗑
-                      </button>
-                    </li>
-                  ))}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="flex items-center gap-1.5 text-sm font-medium">
+                              {visit.venue?.name || "店名未設定"}
+                              {!isOwn && (
+                                <PartnerAvatar email={memberEmailById.get(visit.user_id ?? "")} />
+                              )}
+                              {!visit.is_completed && (
+                                <span className="ml-1 text-xs text-amber-600">登録待ち</span>
+                              )}
+                            </p>
+                            <p className="text-xs text-neutral-600">
+                              {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
+                              {visit.alcohol_tags.length > 0 &&
+                                ` ・ ${visit.alcohol_tags.join("/")}`}
+                            </p>
+                          </div>
+                        </Link>
+                        {isOwn && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(visit)}
+                            aria-label="削除"
+                            className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-neutral-600 focus:ring-2 focus:ring-amber-400 active:bg-neutral-200"
+                          >
+                            🗑
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             );
