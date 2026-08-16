@@ -119,8 +119,11 @@ export default function GroupPage() {
       setInvite(await createInvite(newGroup.id));
     } catch (error) {
       console.error(error);
+      const detail = describeError(error);
       setErrorMessage(
-        "グループを作成しましたが、招待コードの発行に失敗しました。下のボタンから発行し直してください"
+        `グループを作成しましたが、招待コードの発行に失敗しました。下のボタンから発行し直してください${
+          detail ? `(${detail})` : ""
+        }`
       );
     } finally {
       setCreating(false);
@@ -159,7 +162,7 @@ export default function GroupPage() {
       setInvite(await createInvite(group.id));
     } catch (error) {
       console.error(error);
-      setErrorMessage("招待コードの発行に失敗しました");
+      setErrorMessage(describeError(error) ?? "招待コードの発行に失敗しました");
     } finally {
       setIssuingInvite(false);
     }
