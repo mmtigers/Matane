@@ -96,6 +96,8 @@ alter table group_invites enable row level security;
 -- groups: 自グループのメンバーのみ参照可。created_by = 自分も常に参照可としているのは、
 -- 作成直後(まだgroup_membersに自分を追加する前)のinsert...select()で作成した行を
 -- 読み返せるようにするため(RLSはINSERT ... RETURNINGにもSELECTポリシーを適用するため)。
+drop policy if exists "groups are readable by members" on groups;
+
 create policy "groups are readable by members"
   on groups for select
   to authenticated
@@ -106,6 +108,8 @@ create policy "groups are readable by members"
       where gm.group_id = groups.id and gm.user_id = auth.uid()
     )
   );
+
+drop policy if exists "groups are insertable by their creator" on groups;
 
 create policy "groups are insertable by their creator"
   on groups for insert
@@ -119,6 +123,8 @@ create policy "groups are insertable by their creator"
 -- 抜け道になるため、現状のUIで使わない以上は追加しない。
 
 -- group_members: 自分の所属グループのメンバー一覧を閲覧可能。
+drop policy if exists "group_members are readable by fellow members" on group_members;
+
 create policy "group_members are readable by fellow members"
   on group_members for select
   to authenticated
@@ -137,6 +143,8 @@ create policy "group_members are readable by fellow members"
 -- 制約と合わせ、このポリシーは実質「グループ作成者が自分自身を最初のメンバーとして
 -- 追加する」1回限りの操作にしかなり得ない(他人をuser_idに指定することはできず、
 -- 既に何らかのグループに所属済みなら2回目のinsertはunique制約で弾かれるため)。
+drop policy if exists "group_members are insertable by the founding creator" on group_members;
+
 create policy "group_members are insertable by the founding creator"
   on group_members for insert
   to authenticated
@@ -149,6 +157,8 @@ create policy "group_members are insertable by the founding creator"
   );
 
 -- グループを抜ける操作。本人の行のみ削除可能。
+drop policy if exists "group_members are deletable by themselves" on group_members;
+
 create policy "group_members are deletable by themselves"
   on group_members for delete
   to authenticated
@@ -187,6 +197,8 @@ grant execute on function create_group() to authenticated;
 
 -- group_invites: 自グループのメンバーのみ閲覧・発行可能。招待コードの照合・消費は
 -- (未所属ユーザーからも呼べる必要があるため)RLSではなくredeem_group_invite()で行う。
+drop policy if exists "group_invites are readable by group members" on group_invites;
+
 create policy "group_invites are readable by group members"
   on group_invites for select
   to authenticated
@@ -196,6 +208,8 @@ create policy "group_invites are readable by group members"
       where gm.group_id = group_invites.group_id and gm.user_id = auth.uid()
     )
   );
+
+drop policy if exists "group_invites are insertable by group members" on group_invites;
 
 create policy "group_invites are insertable by group members"
   on group_invites for insert
@@ -281,6 +295,9 @@ grant execute on function get_group_members() to authenticated;
 drop policy if exists "venues are readable by authenticated users" on venues;
 drop policy if exists "venues are updatable by authenticated users" on venues;
 drop policy if exists "venues are updatable by their creator" on venues;
+drop policy if exists "venues are readable by creator or group members" on venues;
+drop policy if exists "venues are insertable by authenticated users" on venues;
+drop policy if exists "venues are updatable by creator or group members" on venues;
 
 create policy "venues are readable by creator or group members"
   on venues for select
@@ -336,6 +353,10 @@ create policy "venues are updatable by creator or group members"
 -- Visits は本人 + 同じグループのメンバーのVisitsを閲覧可能。編集・削除は本人のみ。
 -- 既存環境向けマイグレーション: 旧ポリシー(本人のみ)が残っていれば削除する。
 drop policy if exists "visits are readable by owner" on visits;
+drop policy if exists "visits are readable by owner or group members" on visits;
+drop policy if exists "visits are insertable by owner" on visits;
+drop policy if exists "visits are updatable by owner" on visits;
+drop policy if exists "visits are deletable by owner" on visits;
 
 create policy "visits are readable by owner or group members"
   on visits for select
@@ -373,6 +394,11 @@ create policy "visits are deletable by owner"
 insert into storage.buckets (id, name, public)
 values ('visit-photos', 'visit-photos', true)
 on conflict (id) do nothing;
+
+drop policy if exists "visit-photos are readable by anyone" on storage.objects;
+drop policy if exists "visit-photos are uploadable by their owner" on storage.objects;
+drop policy if exists "visit-photos are updatable by their owner" on storage.objects;
+drop policy if exists "visit-photos are deletable by their owner" on storage.objects;
 
 create policy "visit-photos are readable by anyone"
   on storage.objects for select
