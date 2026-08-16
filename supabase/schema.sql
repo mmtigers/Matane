@@ -123,6 +123,26 @@ create policy "groups are insertable by their creator"
 -- 抜け道になるため、現状のUIで使わない以上は追加しない。
 
 -- group_members: 自分の所属グループのメンバー一覧を閲覧可能。
+-- 「同じグループの他メンバーかどうか」の判定に group_members 自身へのサブクエリを
+-- 使うと、そのサブクエリの評価に同じSELECTポリシーが再度適用され、
+-- infinite recursion detected in policy for relation "group_members" になる。
+-- テーブル所有者(postgres)はデフォルトでRLSをバイパスするため、SECURITY DEFINER
+-- 関数(redeem_group_invite()等と同じ手法)経由の判定に置き換えて再帰を断ち切る。
+create or replace function is_fellow_group_member(p_group_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from group_members
+    where group_id = p_group_id and user_id = auth.uid()
+  );
+$$;
+
+grant execute on function is_fellow_group_member(uuid) to authenticated;
+
 drop policy if exists "group_members are readable by fellow members" on group_members;
 
 create policy "group_members are readable by fellow members"
@@ -130,10 +150,7 @@ create policy "group_members are readable by fellow members"
   to authenticated
   using (
     user_id = auth.uid()
-    or exists (
-      select 1 from group_members gm_self
-      where gm_self.group_id = group_members.group_id and gm_self.user_id = auth.uid()
-    )
+    or is_fellow_group_member(group_members.group_id)
   );
 
 -- 招待コード経由の参加はredeem_group_invite() (SECURITY DEFINER、下記)のみで許可し、
