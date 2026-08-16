@@ -1,4 +1,4 @@
-const CACHE_NAME = "matane-shell-v3";
+const CACHE_NAME = "matane-shell-v4";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
@@ -27,7 +27,7 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// ナビゲーションはネットワーク優先、失敗時はキャッシュ済みシェルへフォールバック（地下店舗などの通信断対策）
+// ナビゲーションはネットワーク優先、失敗時はキャッシュ済みシェルへフォールバック(地下店舗などの通信断対策)
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -45,13 +45,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Supabase等の他オリジンへのAPIリクエストはキャッシュ対象外(常にネットワークへ)。
+  // ここでキャッシュしてしまうと、一度エラーになったレスポンス(存在しないテーブル等)が
+  // そのままキャッシュされ、サーバー側の問題が解消された後もエラーが返り続けてしまう。
+  if (new URL(request.url).origin !== self.location.origin) return;
+
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          // エラーレスポンスをキャッシュすると、原因が解消された後もエラーが
+          // 返り続けてしまうため、成功レスポンスのみキャッシュする。
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         })
         .catch(() => cached);
