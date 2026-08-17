@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { AuthStatus } from "@/components/AuthStatus";
 import { ChoiceChips } from "@/components/ChoiceChips";
 import { PlaceCandidateList } from "@/components/PlaceCandidateList";
 import { WISH_REASON_OPTIONS, type WishReason } from "@/constants/choices";
 import {
+  createNamedVisit,
   createQuickCheckIn,
   registerVenueFromPlace,
   scheduleBackgroundSync,
@@ -40,6 +42,9 @@ export default function HomePage() {
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [locatingForPrompt, setLocatingForPrompt] = useState(false);
   const [showNamedDialog, setShowNamedDialog] = useState(false);
+  // 「名前で記録」タップ直後は用途未選択(null)。あしあと/気になるのどちらかを選んで
+  // 初めて店名検索ステップに進む。
+  const [namedMode, setNamedMode] = useState<"visit" | "wish" | null>(null);
   const [venueNameInput, setVenueNameInput] = useState("");
   const [venueCandidates, setVenueCandidates] = useState<PlaceCandidate[]>([]);
   const [loadingVenueCandidates, setLoadingVenueCandidates] = useState(false);
@@ -53,6 +58,7 @@ export default function HomePage() {
   const [showNavGuide, setShowNavGuide] = useState(false);
 
   const suggestion = useSuggestedVenue();
+  const router = useRouter();
 
   useEffect(() => {
     if (!window.localStorage.getItem(NAV_GUIDE_STORAGE_KEY)) {
@@ -143,13 +149,15 @@ export default function HomePage() {
       .finally(() => setLocatingForPrompt(false));
   }
 
-  // 「名前で記録」ダイアログを開く。開くたびに前回の入力をリセットする。
+  // 「名前で記録」ダイアログを開く。開くたびに前回の入力をリセットし、まずは
+  // あしあと/気になるの選択ステップから始める。
   function openNamedDialog() {
     setErrorMessage(null);
     setVenueNameInput("");
     setVenueCandidates([]);
     setSelectedVenuePlace(null);
     setWishReasons([]);
+    setNamedMode(null);
     setShowNamedDialog(true);
   }
 
@@ -177,6 +185,29 @@ export default function HomePage() {
       );
       setShowNamedDialog(false);
       setVenueRegisteredMessage(`「${trimmed}」を気になるリストに追加しました`);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("登録に失敗しました。");
+    } finally {
+      setRegisteringVenue(false);
+    }
+  }
+
+  // 「名前で記録」→「あしあとに記録」の確定ボタン。is_completed: falseのVisitを
+  // 作成し、そのまま登録(二次登録)画面へ遷移して詳細情報を入力させる。
+  async function handleCreateNamedVisit() {
+    const trimmed = venueNameInput.trim();
+    if (!trimmed) return;
+    setRegisteringVenue(true);
+    setErrorMessage(null);
+    try {
+      const place = selectedVenuePlace?.name === trimmed ? selectedVenuePlace : undefined;
+      const visitId = await createNamedVisit(
+        trimmed,
+        place ? { placeId: place.placeId, address: place.address, location: place.location } : undefined
+      );
+      setShowNamedDialog(false);
+      router.push(`/visits/${visitId}/register`);
     } catch (error) {
       console.error(error);
       setErrorMessage("登録に失敗しました。");
@@ -293,16 +324,6 @@ export default function HomePage() {
       <section className="flex flex-col items-center gap-4 py-8">
         <button
           type="button"
-          onClick={openNamePrompt}
-          disabled={checkingIn}
-          className="flex h-40 w-40 flex-col items-center justify-center gap-1 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
-        >
-          <span className="text-3xl">📍</span>
-          <span className="text-base font-semibold">ココを記録</span>
-          <span className="text-[10px] text-black/60">今いる場所をサクッと記録</span>
-        </button>
-        <button
-          type="button"
           onClick={openNamedDialog}
           disabled={checkingIn}
           className="flex h-40 w-40 flex-col items-center justify-center gap-1 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
@@ -310,6 +331,16 @@ export default function HomePage() {
           <span className="text-3xl">🔍</span>
           <span className="text-base font-semibold">名前で記録</span>
           <span className="text-[10px] text-black/60">店名・駅名で記録</span>
+        </button>
+        <button
+          type="button"
+          onClick={openNamePrompt}
+          disabled={checkingIn}
+          className="flex h-40 w-40 flex-col items-center justify-center gap-1 rounded-full bg-amber-400 text-black shadow-lg shadow-amber-400/20 transition-transform active:scale-95 disabled:opacity-60"
+        >
+          <span className="text-3xl">📍</span>
+          <span className="text-base font-semibold">ココを記録</span>
+          <span className="text-[10px] text-black/60">今いる場所をサクッと記録</span>
         </button>
         {checkingIn && <span className="text-sm font-semibold text-neutral-600">登録中...</span>}
       </section>
@@ -461,7 +492,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {showNamedDialog && (
+      {showNamedDialog && namedMode === null && (
         <div
           role="alertdialog"
           aria-modal="true"
@@ -475,7 +506,62 @@ export default function HomePage() {
           >
             <p className="text-sm text-neutral-900">名前で記録</p>
             <p className="mt-1 text-xs text-neutral-600">
-              まだ行ったことのない店を、気になるリストに追加できます。Googleマップの候補から選ぶこともできます。
+              あしあと(行ったお店の記録)にするか、気になる(まだ行っていないお店)にするか選んでください。
+            </p>
+
+            <div className="mt-4 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setNamedMode("visit")}
+                className="rounded-xl bg-amber-400 px-4 py-3 text-left text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400"
+              >
+                👣 あしあとに記録
+                <span className="mt-0.5 block text-xs font-normal text-black/60">
+                  行ったお店を記録し、詳細情報を入力する
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNamedMode("wish")}
+                className="rounded-xl bg-neutral-200 px-4 py-3 text-left text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
+              >
+                ⭐ 気になるに記録
+                <span className="mt-0.5 block text-xs font-normal text-neutral-600">
+                  まだ行っていないお店を、気になるリストに追加する
+                </span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowNamedDialog(false)}
+              className="mt-4 w-full rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showNamedDialog && namedMode !== null && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="名前で記録"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+          onClick={() => setShowNamedDialog(false)}
+        >
+          <div
+            className="mx-4 mb-24 w-full max-w-sm rounded-2xl bg-neutral-100 p-5 sm:mb-0"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm text-neutral-900">
+              {namedMode === "visit" ? "あしあとに記録" : "気になるに記録"}
+            </p>
+            <p className="mt-1 text-xs text-neutral-600">
+              {namedMode === "visit"
+                ? "行ったお店の店名を入力してください。この後、詳細情報の入力に進みます。Googleマップの候補から選ぶこともできます。"
+                : "まだ行ったことのない店を、気になるリストに追加できます。Googleマップの候補から選ぶこともできます。"}
             </p>
 
             <input
@@ -511,32 +597,38 @@ export default function HomePage() {
                 </p>
               )}
 
-            <div className="mt-4">
-              <ChoiceChips
-                label="気になる理由（任意）"
-                options={WISH_REASON_OPTIONS}
-                value={wishReasons}
-                onChange={setWishReasons}
-                multiple
-              />
-            </div>
+            {namedMode === "wish" && (
+              <div className="mt-4">
+                <ChoiceChips
+                  label="気になる理由（任意）"
+                  options={WISH_REASON_OPTIONS}
+                  value={wishReasons}
+                  onChange={setWishReasons}
+                  multiple
+                />
+              </div>
+            )}
 
             <div className="mt-4 flex gap-3">
               <button
                 type="button"
-                onClick={() => setShowNamedDialog(false)}
+                onClick={() => setNamedMode(null)}
                 disabled={registeringVenue}
                 className="flex-1 rounded-full bg-neutral-200 py-3 text-sm font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
-                キャンセル
+                戻る
               </button>
               <button
                 type="button"
-                onClick={handleRegisterVenue}
+                onClick={namedMode === "visit" ? handleCreateNamedVisit : handleRegisterVenue}
                 disabled={registeringVenue || !venueNameInput.trim()}
                 className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
               >
-                {registeringVenue ? "登録中..." : "登録する"}
+                {registeringVenue
+                  ? "登録中..."
+                  : namedMode === "visit"
+                    ? "次へ"
+                    : "登録する"}
               </button>
             </div>
           </div>

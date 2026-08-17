@@ -80,38 +80,21 @@ export async function createQuickCheckIn(
   return visitId;
 }
 
-// ホーム画面の「名前で記録」用。GPSを使わず(その場にいない前提)、Google Places検索結果
-// から選んだ店舗をVenue(店舗マスタ)として事前登録し、そのまま「気になる」にも追加する
-// (is_wished: true)。まだ行ったことのない店を記録する唯一の入口のため、登録した時点で
-// 気になるリストに出てこないと二度と辿り着けなくなるので、登録=気になる登録として一体化する。
-// wishReasonが渡された場合は「気になる理由」タグを合わせて保存する。Visit(来店記録)は作らない。
+// 「名前で記録」の店名入力から、既存Venueの再利用または新規作成を行う共通処理。
 // 重複防止はcreateQuickCheckInと同じ優先順位: place_id一致 → 完全一致店名。
-export async function registerVenueFromPlace(
+async function findOrCreateVenueByNameOrPlace(
   name: string,
-  place?: { placeId: string; address: string | null; location: LatLng | null },
-  wishReason?: string[]
+  place?: { placeId: string; address: string | null; location: LatLng | null }
 ): Promise<string> {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
   if (!trimmed) throw new Error("店名を入力してください");
 
   const existingByPlaceId = place ? await findVenueByPlaceId(place.placeId) : undefined;
-  if (existingByPlaceId) {
-    await toggleVenueWish(existingByPlaceId.id, true);
-    if (wishReason?.length) {
-      await localDb.venues.update(existingByPlaceId.id, { wish_reason: wishReason });
-    }
-    return existingByPlaceId.id;
-  }
+  if (existingByPlaceId) return existingByPlaceId.id;
 
   const matches = await searchVenuesLocal(trimmed);
   const exactMatch = matches.find((venue) => venue.name === trimmed);
-  if (exactMatch) {
-    await toggleVenueWish(exactMatch.id, true);
-    if (wishReason?.length) {
-      await localDb.venues.update(exactMatch.id, { wish_reason: wishReason });
-    }
-    return exactMatch.id;
-  }
+  if (exactMatch) return exactMatch.id;
 
   const venueId = crypto.randomUUID();
   const venue: LocalVenue = {
@@ -121,14 +104,54 @@ export async function registerVenueFromPlace(
     location: place?.location ?? null,
     address: place?.address ?? null,
     nearest_station: null,
-    is_wished: true,
+    is_wished: false,
     category: "family",
-    wish_reason: wishReason?.length ? wishReason : null,
+    wish_reason: null,
     syncStatus: "pending",
   };
   await localDb.venues.add(venue);
+  return venueId;
+}
+
+// ホーム画面の「名前で記録」→「気になるに記録」用。GPSを使わず(その場にいない前提)、
+// Google Places検索結果から選んだ店舗をVenue(店舗マスタ)として事前登録し、そのまま
+// 「気になる」にも追加する(is_wished: true)。wishReasonが渡された場合は「気になる理由」
+// タグを合わせて保存する。Visit(来店記録)は作らない。
+export async function registerVenueFromPlace(
+  name: string,
+  place?: { placeId: string; address: string | null; location: LatLng | null },
+  wishReason?: string[]
+): Promise<string> {
+  const venueId = await findOrCreateVenueByNameOrPlace(name, place);
+  await toggleVenueWish(venueId, true);
+  if (wishReason?.length) {
+    await localDb.venues.update(venueId, { wish_reason: wishReason });
+  }
   scheduleBackgroundSync();
   return venueId;
+}
+
+// ホーム画面の「名前で記録」→「あしあとに記録」用。GPSを使わず、店名(またはGoogle Places
+// 候補)からVenueを事前登録し、is_completed: falseのVisitを作成する。呼び出し元はこの後
+// 登録(二次登録)画面へ遷移し、そのまま詳細情報(誰と/また行きたい/予算感等)を入力させる。
+export async function createNamedVisit(
+  name: string,
+  place?: { placeId: string; address: string | null; location: LatLng | null }
+): Promise<string> {
+  const venueId = await findOrCreateVenueByNameOrPlace(name, place);
+
+  const visitId = crypto.randomUUID();
+  const visit: LocalVisit = {
+    id: visitId,
+    venue_id: venueId,
+    visited_at: new Date().toISOString(),
+    is_completed: false,
+    ...emptyVisitFields(),
+    syncStatus: "pending",
+  };
+  await localDb.visits.add(visit);
+  scheduleBackgroundSync();
+  return visitId;
 }
 
 // 5秒間の「取り消す」スナックバー用。基本は未同期のはずだが、5秒の間にバック
