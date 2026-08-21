@@ -1,36 +1,26 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { Skeleton, SkeletonList } from "@/components/Skeleton";
 import { localDb, type LocalVenue } from "@/lib/db/localDb";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { distanceMeters, formatDistance, getCurrentLocation } from "@/lib/geo";
+import { useGoogleMapsScript } from "@/lib/useGoogleMapsScript";
 import type { LatLng } from "@/types/models";
 
 const MAP_FILTER_STORAGE_KEY = "matane:mapFilter";
 
 // 東京駅。位置情報を持つ店舗が1件も無い場合のフォールバック中心座標。
-const DEFAULT_CENTER: [number, number] = [35.681236, 139.767125];
+const DEFAULT_CENTER: LatLng = { lat: 35.681236, lng: 139.767125 };
 
-// Leafletの既定マーカー画像はNext.jsのバンドルでは自動解決できないため、
-// アセットコピーが不要な絵文字divIconを使う(タイムライン等の絵文字表現とも統一)。
-function createEmojiIcon(emoji: string) {
-  return L.divIcon({
-    html: `<span style="font-size:22px;line-height:1">${emoji}</span>`,
-    className: "",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
-}
-
-const visitedIcon = createEmojiIcon("🏮");
-const wishedIcon = createEmojiIcon("⭐");
-const currentLocationIcon = createEmojiIcon("📍");
+// Maps JavaScript API専用キーが無ければ、瞬録の周辺候補取得で使っているPlaces
+// APIキーを流用する(同じGoogle CloudプロジェクトでMaps JavaScript APIも有効化
+// していれば、追加設定なしでそのまま動く)。
+const GOOGLE_MAPS_API_KEY =
+  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
 
 type LocatedVenue = LocalVenue & { location: LatLng };
 type MapFilter = "all" | "visited" | "wished";
@@ -41,14 +31,125 @@ const FILTERS: { key: MapFilter; label: string; icon: string }[] = [
   { key: "wished", label: "気になる", icon: "⭐" },
 ];
 
-// currentLocationが後から変わった際にMapContainerの中心を追従させる。
-// react-leafletはcenter propの変更を自動追従しないためuseMapで明示的にpanする。
-function RecenterOnLocation({ location }: { location: LatLng | null }) {
-  const map = useMap();
+// 絵文字をそのままマーカーアイコンにする(タイムライン等の絵文字表現と統一)。
+// Google Maps JavaScript APIはSVGのdata URLをアイコンとしてそのまま扱える。
+function createEmojiMarkerIcon(emoji: string): google.maps.Icon {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><text x="16" y="24" font-size="24" text-anchor="middle">${emoji}</text></svg>`;
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new google.maps.Size(32, 32),
+    anchor: new google.maps.Point(16, 16),
+  };
+}
+
+function buildInfoWindowContent(venue: LocatedVenue, onNavigate: (venueId: string) => void) {
+  const container = document.createElement("div");
+  container.style.minWidth = "160px";
+
+  const title = document.createElement("p");
+  title.textContent = venue.name || "店名未設定";
+  title.style.fontWeight = "600";
+  title.style.color = "#171717";
+  title.style.marginBottom = "4px";
+  container.appendChild(title);
+
+  const link = document.createElement("button");
+  link.type = "button";
+  link.textContent = "店舗詳細を見る";
+  Object.assign(link.style, {
+    color: "#d97706",
+    textDecoration: "underline",
+    background: "none",
+    border: "none",
+    padding: "0",
+    font: "inherit",
+    cursor: "pointer",
+  });
+  link.addEventListener("click", () => onNavigate(venue.id));
+  container.appendChild(link);
+
+  return container;
+}
+
+// ユーザー自身のGoogleマップ(Google Maps JavaScript API)を使った地図描画。
+// react-leaflet相当の宣言的ラッパーは使わず、Google Maps SDKを直接操作する
+// (絵文字マーカー・InfoWindowなど、このアプリの表現をそのまま再現するため)。
+function GoogleMapView({
+  venues,
+  currentLocation,
+  initialCenter,
+}: {
+  venues: LocatedVenue[];
+  currentLocation: LatLng | null;
+  initialCenter: LatLng;
+}) {
+  const router = useRouter();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const markersRef = useRef<google.maps.Marker[]>([]);
+  const currentMarkerRef = useRef<google.maps.Marker | null>(null);
+  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+
   useEffect(() => {
-    if (location) map.setView([location.lat, location.lng], 15);
-  }, [location, map]);
-  return null;
+    if (!containerRef.current || mapRef.current) return;
+    mapRef.current = new google.maps.Map(containerRef.current, {
+      center: initialCenter,
+      zoom: 13,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+    });
+    infoWindowRef.current = new google.maps.InfoWindow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 初期中心はマウント時の1回だけ使う
+  }, []);
+
+  // currentLocationが後から取得・更新された際に地図を追従させる。
+  useEffect(() => {
+    if (!mapRef.current || !currentLocation) return;
+    mapRef.current.panTo(currentLocation);
+    mapRef.current.setZoom(15);
+  }, [currentLocation]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    currentMarkerRef.current?.setMap(null);
+    currentMarkerRef.current = currentLocation
+      ? new google.maps.Marker({
+          position: currentLocation,
+          map: mapRef.current,
+          icon: createEmojiMarkerIcon("📍"),
+          title: "現在地",
+          zIndex: 10,
+        })
+      : null;
+  }, [currentLocation]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    markersRef.current.forEach((marker) => marker.setMap(null));
+    markersRef.current = venues.map((venue) => {
+      const marker = new google.maps.Marker({
+        position: venue.location,
+        map,
+        icon: createEmojiMarkerIcon(venue.is_wished ? "⭐" : "🏮"),
+        title: venue.name || "店名未設定",
+      });
+      marker.addListener("click", () => {
+        infoWindowRef.current?.setContent(
+          buildInfoWindowContent(venue, (venueId) => router.push(`/venues/${venueId}`))
+        );
+        infoWindowRef.current?.open({ map, anchor: marker });
+      });
+      return marker;
+    });
+
+    return () => {
+      markersRef.current.forEach((marker) => marker.setMap(null));
+    };
+  }, [venues, router]);
+
+  return <div ref={containerRef} className="h-full w-full" />;
 }
 
 export default function MapClient() {
@@ -77,6 +178,7 @@ export default function MapClient() {
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const isOnline = useOnlineStatus();
+  const mapsStatus = useGoogleMapsScript(GOOGLE_MAPS_API_KEY);
 
   useEffect(() => {
     window.sessionStorage.setItem(MAP_FILTER_STORAGE_KEY, filter);
@@ -137,11 +239,8 @@ export default function MapClient() {
     );
   }
 
-  const center: [number, number] = currentLocation
-    ? [currentLocation.lat, currentLocation.lng]
-    : located[0]
-      ? [located[0].location.lat, located[0].location.lng]
-      : DEFAULT_CENTER;
+  const center: LatLng = currentLocation ?? located[0]?.location ?? DEFAULT_CENTER;
+  const showMap = isOnline && mapsStatus === "ready";
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-3 px-4 pt-6">
@@ -185,47 +284,36 @@ export default function MapClient() {
           </button>
           {locationError && <p className="text-xs text-red-600">{locationError}</p>}
 
-          {isOnline ? (
+          {showMap ? (
             <>
               <div className="h-[55vh] overflow-hidden rounded-2xl">
-                <MapContainer center={center} zoom={13} scrollWheelZoom className="h-full w-full">
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  <RecenterOnLocation location={currentLocation} />
-                  {currentLocation && (
-                    <Marker
-                      position={[currentLocation.lat, currentLocation.lng]}
-                      icon={currentLocationIcon}
-                    >
-                      <Popup>現在地</Popup>
-                    </Marker>
-                  )}
-                  {sorted.map((venue) => (
-                    <Marker
-                      key={venue.id}
-                      position={[venue.location.lat, venue.location.lng]}
-                      icon={venue.is_wished ? wishedIcon : visitedIcon}
-                    >
-                      <Popup>
-                        <p className="font-semibold text-neutral-900">
-                          {venue.name || "店名未設定"}
-                        </p>
-                        <Link href={`/venues/${venue.id}`} className="text-amber-600 underline">
-                          店舗詳細を見る
-                        </Link>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
+                <GoogleMapView
+                  venues={sorted}
+                  currentLocation={currentLocation}
+                  initialCenter={center}
+                />
               </div>
               <p className="text-xs text-neutral-600">🏮 訪問済み ・ ⭐ 気になる ・ 📍 現在地</p>
             </>
           ) : (
             <div className="flex h-40 flex-col items-center justify-center gap-1 rounded-2xl bg-neutral-100 px-4 text-center">
-              <p className="text-sm text-neutral-700">📡 オフラインのため地図画像は表示できません</p>
-              <p className="text-xs text-neutral-500">下の一覧は引き続き使えます</p>
+              {!isOnline ? (
+                <>
+                  <p className="text-sm text-neutral-700">📡 オフラインのため地図画像は表示できません</p>
+                  <p className="text-xs text-neutral-500">下の一覧は引き続き使えます</p>
+                </>
+              ) : mapsStatus === "error" ? (
+                <>
+                  <p className="text-sm text-neutral-700">
+                    🗺️ Googleマップを表示できませんでした
+                  </p>
+                  <p className="text-xs text-neutral-500">
+                    APIキー未設定、または読み込みに失敗しました。下の一覧は引き続き使えます
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-neutral-700">地図を読み込み中...</p>
+              )}
             </div>
           )}
 
