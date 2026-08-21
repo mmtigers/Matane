@@ -330,6 +330,100 @@ export async function toggleVenueWish(venueId: string, isWished: boolean) {
   scheduleBackgroundSync();
 }
 
+// 店舗詳細画面で、位置情報が未設定のVenue(候補を選ばず店名だけで登録した過去の
+// あしあと・気になる)に、後からGoogle Places候補を選んで位置情報を追加設定するための
+// 関数。「ちかく」画面はlocationがある店舗しか地図に出せないため、この後付け設定が
+// あしあと・気になるを「ちかく」に反映させる唯一の手段になる。
+export async function attachVenueLocation(
+  venueId: string,
+  place: { placeId: string; address: string | null; location: LatLng; category?: PlaceCategory | null }
+) {
+  // 同じplace_idの店舗が既に別Venueとして存在する場合、Supabase側のunique制約に
+  // 抵触するため、このVenueにはplace_idを設定せず位置情報のみ反映する。
+  const existingVenue = await findVenueByPlaceId(place.placeId);
+  const placeIdPatch =
+    existingVenue && existingVenue.id !== venueId ? {} : { place_id: place.placeId };
+
+  await localDb.venues.update(venueId, {
+    location: place.location,
+    address: place.address,
+    place_category: place.category ?? null,
+    ...placeIdPatch,
+    syncStatus: "pending",
+  });
+  scheduleBackgroundSync();
+}
+
+const IMPORT_WISH_REASON = "Googleマップからインポート";
+
+export interface ImportPlaceInput {
+  name: string;
+  location: LatLng | null;
+}
+
+export interface ImportWishedVenuesResult {
+  added: number;
+  updated: number;
+  skipped: number;
+}
+
+// Googleマップの「保存済み」リスト(星・旗)のエクスポートファイルから読み取った場所を、
+// まとめて気になるリストへ取り込む。既存のVenueと店名が完全一致すれば、それを気になる
+// リストに追加するだけ(重複登録しない)。位置情報が取れなかった項目もリストには
+// 追加し、位置情報は店舗詳細画面から後付け設定できるようにする(attachVenueLocation)。
+export async function importWishedVenues(
+  items: ImportPlaceInput[]
+): Promise<ImportWishedVenuesResult> {
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const item of items) {
+    const trimmed = item.name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
+    if (!trimmed) {
+      skipped++;
+      continue;
+    }
+
+    const matches = await searchVenuesLocal(trimmed);
+    const existing = matches.find((venue) => venue.name === trimmed);
+
+    if (existing) {
+      const patch: Partial<LocalVenue> = {};
+      if (!existing.is_wished) patch.is_wished = true;
+      if (!existing.location && item.location) patch.location = item.location;
+
+      if (Object.keys(patch).length > 0) {
+        await localDb.venues.update(existing.id, { ...patch, syncStatus: "pending" });
+        updated++;
+      } else {
+        skipped++;
+      }
+      continue;
+    }
+
+    const venueId = crypto.randomUUID();
+    const venue: LocalVenue = {
+      id: venueId,
+      place_id: null,
+      name: trimmed,
+      location: item.location,
+      address: null,
+      nearest_station: null,
+      is_wished: true,
+      category: "family",
+      wish_reason: [IMPORT_WISH_REASON],
+      place_category: null,
+      syncStatus: "pending",
+    };
+    await localDb.venues.add(venue);
+    added++;
+  }
+
+  scheduleBackgroundSync();
+  return { added, updated, skipped };
+}
+
 // 1分放置の自動保存トリガー。呼び出し元でsetTimeoutと組み合わせる。
 export function scheduleBackgroundSync() {
   void syncPendingChanges();

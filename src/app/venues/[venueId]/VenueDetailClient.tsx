@@ -10,13 +10,15 @@ import {
   withCommuteOverrides,
 } from "@/config/commute";
 import { PartnerAvatar } from "@/components/PartnerAvatar";
+import { PlaceCandidateList } from "@/components/PlaceCandidateList";
 import { Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { loadCommuteOverrides } from "@/lib/commuteSettings";
-import { toggleVenueWish } from "@/lib/db/checkin";
+import { attachVenueLocation, toggleVenueWish } from "@/lib/db/checkin";
 import { buildMemberEmailMap, isOwnVisit, useGroupMembers } from "@/lib/db/groups";
 import { useVenue, useVisitsForVenue } from "@/lib/db/queries";
 import { googleMapsUrl } from "@/lib/geo";
+import { type PlaceCandidate, searchVenuesByText } from "@/lib/places";
 
 export function VenueDetailClient({ venueId }: { venueId: string }) {
   const venue = useVenue(venueId);
@@ -26,6 +28,11 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
   const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
   const [now, setNow] = useState(() => new Date());
   const [shareCopied, setShareCopied] = useState(false);
+  // 位置情報未設定のVenueに、Google Places候補から後付けで位置情報を設定するための状態。
+  const [showLocationSearch, setShowLocationSearch] = useState(false);
+  const [locationCandidates, setLocationCandidates] = useState<PlaceCandidate[]>([]);
+  const [loadingLocationCandidates, setLoadingLocationCandidates] = useState(false);
+  const [attachingLocation, setAttachingLocation] = useState(false);
   // 設定画面での上書きはlocalStorageに保存されておりSSR時点では読めないため、
   // 初期値は環境変数由来のデフォルトのままにし、マウント後のeffectで反映する
   // (hydrationミスマッチを避けるため)。
@@ -72,6 +79,34 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
 
     await navigator.clipboard.writeText(mapUrl ? `${text}\n${mapUrl}` : text);
     setShareCopied(true);
+  }
+
+  async function handleOpenLocationSearch() {
+    if (!venue) return;
+    setShowLocationSearch(true);
+    setLoadingLocationCandidates(true);
+    try {
+      const results = await searchVenuesByText(venue.name);
+      setLocationCandidates(results);
+    } finally {
+      setLoadingLocationCandidates(false);
+    }
+  }
+
+  async function handleAttachLocation(place: PlaceCandidate) {
+    if (!venue || !place.location) return;
+    setAttachingLocation(true);
+    try {
+      await attachVenueLocation(venue.id, {
+        placeId: place.placeId,
+        address: place.address,
+        location: place.location,
+        category: place.category,
+      });
+      setShowLocationSearch(false);
+    } finally {
+      setAttachingLocation(false);
+    }
   }
 
   if (!venue || !visits) {
@@ -121,6 +156,51 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
           {shareCopied && <span className="text-xs text-amber-600">コピーしました</span>}
         </div>
       </header>
+
+      {!venue.location && (
+        <section className="flex flex-col gap-2 rounded-2xl bg-neutral-100 p-4">
+          <p className="text-sm text-neutral-700">
+            📍 位置情報が未設定です。設定すると「ちかく」画面の地図に表示されます。
+          </p>
+          {!showLocationSearch ? (
+            <button
+              type="button"
+              onClick={handleOpenLocationSearch}
+              className="self-start rounded-full bg-amber-400 px-4 py-2 text-sm font-semibold text-black focus:ring-2 focus:ring-amber-400"
+            >
+              Googleマップから位置情報を検索
+            </button>
+          ) : (
+            <>
+              {loadingLocationCandidates && (
+                <p className="text-xs text-neutral-600">検索中...</p>
+              )}
+              {!loadingLocationCandidates && locationCandidates.length === 0 && (
+                <p className="text-xs text-neutral-600">
+                  候補が見つかりませんでした。店名を変えて店舗詳細を再検索してください。
+                </p>
+              )}
+              {!loadingLocationCandidates && locationCandidates.length > 0 && (
+                <PlaceCandidateList
+                  candidates={locationCandidates}
+                  selectedPlaceId={null}
+                  onSelect={handleAttachLocation}
+                  itemClassName="bg-neutral-200 text-neutral-800"
+                />
+              )}
+              {attachingLocation && <p className="text-xs text-neutral-600">設定中...</p>}
+              <button
+                type="button"
+                onClick={() => setShowLocationSearch(false)}
+                disabled={attachingLocation}
+                className="self-start text-xs font-semibold text-neutral-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              >
+                キャンセル
+              </button>
+            </>
+          )}
+        </section>
+      )}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-neutral-600">これまでの訪問</h2>
