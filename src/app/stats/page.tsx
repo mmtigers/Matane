@@ -4,13 +4,7 @@ import { useMemo, useState } from "react";
 import { BarRow } from "@/components/BarRow";
 import { SkeletonList } from "@/components/Skeleton";
 import { useTimelineVisits } from "@/lib/db/queries";
-import {
-  alcoholTagFrequency,
-  monthlyVisitCounts,
-  monthsBetween,
-  overallAverageBudget,
-  whoFrequency,
-} from "@/lib/stats";
+import { alcoholTagFrequency, monthlyVisitCounts, monthsBetween, whoFrequency } from "@/lib/stats";
 type Period = "6m" | "1y" | "all";
 const PERIODS: { key: Period; label: string }[] = [
   { key: "6m", label: "6ヶ月" },
@@ -44,7 +38,6 @@ export default function StatsPage() {
   const alcoholMax = Math.max(1, ...alcoholFreq.map((item) => item.count));
   const whoFreq = useMemo(() => whoFrequency(completed), [completed]);
   const whoMax = Math.max(1, ...whoFreq.map((item) => item.count));
-  const avgBudget = useMemo(() => overallAverageBudget(completed), [completed]);
   const venueCount = useMemo(
     () => new Set(completed.map((visit) => visit.venue_id)).size,
     [completed]
@@ -62,7 +55,7 @@ export default function StatsPage() {
         <p className="text-sm text-neutral-600">まだ訪問記録がありません。</p>
       ) : (
         <>
-          <section className="grid grid-cols-3 gap-3">
+          <section className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-neutral-100 p-4 text-center">
               <p className="text-2xl font-bold text-amber-600">{completed.length}</p>
               <p className="mt-1 text-xs text-neutral-600">総訪問回数</p>
@@ -70,12 +63,6 @@ export default function StatsPage() {
             <div className="rounded-2xl bg-neutral-100 p-4 text-center">
               <p className="text-2xl font-bold text-amber-600">{venueCount}</p>
               <p className="mt-1 text-xs text-neutral-600">訪問した店舗数</p>
-            </div>
-            <div className="rounded-2xl bg-neutral-100 p-4 text-center">
-              <p className="text-2xl font-bold text-amber-600">
-                {avgBudget !== null ? `¥${avgBudget.toLocaleString("ja-JP")}` : "—"}
-              </p>
-              <p className="mt-1 text-xs text-neutral-600">平均予算</p>
             </div>
           </section>
 

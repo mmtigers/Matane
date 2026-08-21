@@ -1,5 +1,4 @@
 import { ALCOHOL_OPTIONS, WHO_OPTIONS } from "@/constants/choices";
-import { estimateAverageBudget } from "@/lib/budget";
 import type { VisitWithVenue } from "@/lib/db/queries";
 import { formatMonthLabel, monthKey } from "@/lib/time";
 
@@ -57,10 +56,6 @@ export function whoFrequency(visits: VisitWithVenue[]): FrequencyItem[] {
     visits.flatMap((visit) => visit.who),
     WHO_OPTIONS
   );
-}
-
-export function overallAverageBudget(visits: VisitWithVenue[]): number | null {
-  return estimateAverageBudget(visits.flatMap((visit) => (visit.budget ? [visit.budget] : [])));
 }
 
 // fromの月からtoの月までの月数(両端を含む)。「全期間」の集計幅を求めるのに使う。

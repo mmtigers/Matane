@@ -179,7 +179,12 @@ export default function HomePage() {
       await registerVenueFromPlace(
         trimmed,
         place
-          ? { placeId: place.placeId, address: place.address, location: place.location }
+          ? {
+              placeId: place.placeId,
+              address: place.address,
+              location: place.location,
+              category: place.category,
+            }
           : undefined,
         wishReasons
       );
@@ -204,7 +209,14 @@ export default function HomePage() {
       const place = selectedVenuePlace?.name === trimmed ? selectedVenuePlace : undefined;
       const visitId = await createNamedVisit(
         trimmed,
-        place ? { placeId: place.placeId, address: place.address, location: place.location } : undefined
+        place
+          ? {
+              placeId: place.placeId,
+              address: place.address,
+              location: place.location,
+              category: place.category,
+            }
+          : undefined
       );
       setShowNamedDialog(false);
       router.push(`/visits/${visitId}/register`);
@@ -261,7 +273,7 @@ export default function HomePage() {
         pendingLocation,
         instantNameInput,
         quickPhotoDataUrl,
-        place ? { placeId: place.placeId, address: place.address } : undefined
+        place ? { placeId: place.placeId, address: place.address, category: place.category } : undefined
       );
       setUndoVisitId(visitId);
     } catch (error) {

@@ -1,6 +1,6 @@
 // 選択肢の実体(配列)は constants/choices.ts が唯一の情報源。ここでは型だけを再公開する。
-import type { Who, Revisit, Budget, AlcoholTag, Quietness } from "@/constants/choices";
-export type { Who, Revisit, Budget, AlcoholTag, Quietness };
+import type { Who, Revisit, Budget, AlcoholTag, Quietness, PlaceCategory } from "@/constants/choices";
+export type { Who, Revisit, Budget, AlcoholTag, Quietness, PlaceCategory };
 
 export interface LatLng {
   lat: number;
@@ -21,6 +21,9 @@ export interface Venue {
   is_wished: boolean;
   category: VenueCategory;
   wish_reason: string[] | null;
+  // 場所のカテゴリ(公園/飲食店/お店/駅)。あしあとのカテゴリフィルター用。Google Places
+  // 候補から選んで登録した場合のみ判定でき、店名のみの手入力ではnullのまま(未分類)。
+  place_category: PlaceCategory | null;
 }
 
 export interface Visit {

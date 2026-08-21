@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { uploadVisitPhotoIfNeeded } from "@/lib/storage";
-import type { LatLng, VenueCategory, Visit } from "@/types/models";
+import type { LatLng, PlaceCategory, VenueCategory, Visit } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 
 let syncing = false;
@@ -61,6 +61,7 @@ function toVenueRecord(venue: LocalVenue, userId: string) {
     is_wished,
     category,
     wish_reason,
+    place_category,
   } = venue;
   return {
     id,
@@ -72,6 +73,7 @@ function toVenueRecord(venue: LocalVenue, userId: string) {
     is_wished: is_wished ?? false,
     category: category ?? "bar",
     wish_reason: wish_reason ?? null,
+    place_category: place_category ?? null,
     created_by: userId,
   };
 }
@@ -136,6 +138,7 @@ interface CloudVenueRow {
   is_wished?: boolean | null;
   category?: VenueCategory | null;
   wish_reason?: string[] | null;
+  place_category?: PlaceCategory | null;
 }
 
 interface CloudVisitRow extends Visit {
@@ -153,6 +156,7 @@ function fromVenueRecord(row: CloudVenueRow): LocalVenue {
     is_wished: row.is_wished ?? false,
     category: row.category ?? "bar",
     wish_reason: row.wish_reason ?? null,
+    place_category: row.place_category ?? null,
     syncStatus: "synced",
   };
 }

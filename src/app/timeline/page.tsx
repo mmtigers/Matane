@@ -2,18 +2,26 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ALCOHOL_ICONS, ALCOHOL_OPTIONS, type AlcoholTag } from "@/constants/choices";
+import {
+  PLACE_CATEGORY_ICONS,
+  PLACE_CATEGORY_LABELS,
+  PLACE_CATEGORY_OPTIONS,
+  type PlaceCategory,
+} from "@/constants/choices";
 import { PartnerAvatar } from "@/components/PartnerAvatar";
 import { SkeletonList } from "@/components/Skeleton";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { estimateAverageBudget } from "@/lib/budget";
 import { deleteVisit, restoreVisit } from "@/lib/db/checkin";
 import { buildMemberEmailMap, isOwnVisit, useGroupMembers } from "@/lib/db/groups";
 import { useTimelineVisits, type VisitWithVenue } from "@/lib/db/queries";
 import { SAVED_TOAST_KEY } from "@/lib/sessionFlags";
 import { formatMonthLabel, monthKey } from "@/lib/time";
 
-const ALCOHOL_FILTERS = ALCOHOL_OPTIONS.map((tag) => ({ tag, icon: ALCOHOL_ICONS[tag] }));
+const PLACE_CATEGORY_FILTERS = PLACE_CATEGORY_OPTIONS.map((category) => ({
+  category,
+  icon: PLACE_CATEGORY_ICONS[category],
+  label: PLACE_CATEGORY_LABELS[category],
+}));
 
 const MONTHS_PER_PAGE = 6;
 const FILTER_STORAGE_KEY = "matane:timelineFilter";
@@ -49,11 +57,11 @@ export default function TimelinePage() {
   const { session, loading: authLoading } = useAuth();
   const groupMembers = useGroupMembers();
   const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
-  // 直前に選んでいたお酒フィルターをセッション内で覚えておき、画面を出入りするたびに
+  // 直前に選んでいた場所カテゴリフィルターをセッション内で覚えておき、画面を出入りするたびに
   // 選び直さなくて済むようにする(端末再起動やタブを閉じれば自然にリセットされる)。
   // sessionStorageはSSR側で読めないため、初期値はSSRと揃えてnullにし、マウント後の
   // effectで復元する(hydrationミスマッチを避けるため)。
-  const [activeTag, setActiveTag] = useState<AlcoholTag | null>(null);
+  const [activeCategory, setActiveCategory] = useState<PlaceCategory | null>(null);
   const [visibleMonthCount, setVisibleMonthCount] = useState(MONTHS_PER_PAGE);
   // 保存直後の遷移など、一時的な単発メッセージをまとめて扱う
   // (同時に出さない前提のため単一の状態で十分)。
@@ -66,19 +74,19 @@ export default function TimelinePage() {
 
   useEffect(() => {
     const stored = window.sessionStorage.getItem(FILTER_STORAGE_KEY);
-    if ((ALCOHOL_OPTIONS as readonly string[]).includes(stored ?? "")) {
+    if ((PLACE_CATEGORY_OPTIONS as readonly string[]).includes(stored ?? "")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorageの値はSSR時点で読めないため、マウント後に一度だけ反映する
-      setActiveTag(stored as AlcoholTag);
+      setActiveCategory(stored as PlaceCategory);
     }
   }, []);
 
   useEffect(() => {
-    if (activeTag) {
-      window.sessionStorage.setItem(FILTER_STORAGE_KEY, activeTag);
+    if (activeCategory) {
+      window.sessionStorage.setItem(FILTER_STORAGE_KEY, activeCategory);
     } else {
       window.sessionStorage.removeItem(FILTER_STORAGE_KEY);
     }
-  }, [activeTag]);
+  }, [activeCategory]);
 
   useEffect(() => {
     const raw = window.sessionStorage.getItem(SAVED_TOAST_KEY);
@@ -104,9 +112,9 @@ export default function TimelinePage() {
 
   const filtered = useMemo(() => {
     if (!visits) return [];
-    if (!activeTag) return visits;
-    return visits.filter((visit) => visit.alcohol_tags.includes(activeTag));
-  }, [visits, activeTag]);
+    if (!activeCategory) return visits;
+    return visits.filter((visit) => visit.venue?.place_category === activeCategory);
+  }, [visits, activeCategory]);
 
   const monthGroups = useMemo(() => groupByMonth(filtered), [filtered]);
   const visibleGroups = useMemo(
@@ -157,16 +165,16 @@ export default function TimelinePage() {
 
       <div className="flex items-center gap-2">
         <div className="flex gap-2">
-          {ALCOHOL_FILTERS.map(({ icon, tag }) => (
+          {PLACE_CATEGORY_FILTERS.map(({ icon, label, category }) => (
             <button
-              key={tag}
+              key={category}
               type="button"
-              onClick={() => setActiveTag((current) => (current === tag ? null : tag))}
+              onClick={() => setActiveCategory((current) => (current === category ? null : category))}
               className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-colors focus:ring-2 focus:ring-amber-400 ${
-                activeTag === tag ? "bg-amber-400" : "bg-neutral-100"
+                activeCategory === category ? "bg-amber-400" : "bg-neutral-100"
               }`}
-              aria-label={tag}
-              aria-pressed={activeTag === tag}
+              aria-label={label}
+              aria-pressed={activeCategory === category}
             >
               {icon}
             </button>
@@ -199,80 +207,70 @@ export default function TimelinePage() {
         <p className="text-sm text-neutral-600">まだ訪問記録がありません。</p>
       ) : (
         <div className="flex flex-col gap-6">
-          {visibleGroups.map((group) => {
-            const avgBudget = estimateAverageBudget(
-              group.visits.flatMap((visit) => (visit.budget ? [visit.budget] : []))
-            );
-            return (
-              <section key={group.key} id={`month-${group.key}`} className="flex flex-col gap-3">
-                <h2 className="rounded-lg bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-600">
-                  {group.label} （{group.visits.length}回
-                  {avgBudget !== null && ` / 平均¥${avgBudget.toLocaleString("ja-JP")}`}）
-                </h2>
-                <ul className="flex flex-col gap-2">
-                  {group.visits.map((visit) => {
-                    const isOwn = isOwnVisit(visit, session?.user.id, authLoading);
-                    return (
-                      <li
-                        key={visit.id}
-                        className="flex items-center gap-2 rounded-xl bg-neutral-100 px-4 py-3"
+          {visibleGroups.map((group) => (
+            <section key={group.key} id={`month-${group.key}`} className="flex flex-col gap-3">
+              <h2 className="rounded-lg bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-600">
+                {group.label}
+              </h2>
+              <ul className="flex flex-col gap-2">
+                {group.visits.map((visit) => {
+                  const isOwn = isOwnVisit(visit, session?.user.id, authLoading);
+                  return (
+                    <li
+                      key={visit.id}
+                      className="flex items-center gap-2 rounded-xl bg-neutral-100 px-4 py-3"
+                    >
+                      <Link
+                        href={
+                          visit.is_completed
+                            ? `/visits/${visit.id}`
+                            : `/visits/${visit.id}/register`
+                        }
+                        className="flex flex-1 items-center gap-3 min-w-0"
                       >
-                        <Link
-                          href={
-                            visit.is_completed
-                              ? `/visits/${visit.id}`
-                              : `/visits/${visit.id}/register`
-                          }
-                          className="flex flex-1 items-center gap-3 min-w-0"
-                        >
-                          <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-lg bg-neutral-200 text-lg">
-                            {visit.best_photo ? (
-                              // eslint-disable-next-line @next/next/no-img-element -- ローカルdata URLサムネイル
-                              <img
-                                src={visit.best_photo}
-                                alt=""
-                                className="h-full w-full object-cover"
-                              />
-                            ) : visit.alcohol_tags.length > 0 ? (
-                              ALCOHOL_ICONS[visit.alcohol_tags[0]]
-                            ) : (
-                              "🏮"
+                        <div className="h-12 w-12 flex-none overflow-hidden rounded-lg bg-neutral-200">
+                          {visit.best_photo && (
+                            // eslint-disable-next-line @next/next/no-img-element -- ローカルdata URLサムネイル
+                            <img
+                              src={visit.best_photo}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="flex items-center gap-1.5 text-sm font-medium">
+                            {visit.venue?.name || "店名未設定"}
+                            {!isOwn && (
+                              <PartnerAvatar email={memberEmailById.get(visit.user_id ?? "")} />
                             )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="flex items-center gap-1.5 text-sm font-medium">
-                              {visit.venue?.name || "店名未設定"}
-                              {!isOwn && (
-                                <PartnerAvatar email={memberEmailById.get(visit.user_id ?? "")} />
-                              )}
-                              {!visit.is_completed && (
-                                <span className="ml-1 text-xs text-amber-600">登録待ち</span>
-                              )}
-                            </p>
-                            <p className="text-xs text-neutral-600">
-                              {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
-                              {visit.alcohol_tags.length > 0 &&
-                                ` ・ ${visit.alcohol_tags.join("/")}`}
-                            </p>
-                          </div>
-                        </Link>
-                        {isOwn && (
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(visit)}
-                            aria-label="削除"
-                            className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-neutral-600 focus:ring-2 focus:ring-amber-400 active:bg-neutral-200"
-                          >
-                            🗑
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            );
-          })}
+                            {!visit.is_completed && (
+                              <span className="ml-1 text-xs text-amber-600">登録待ち</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-neutral-600">
+                            {new Date(visit.visited_at).toLocaleDateString("ja-JP")}
+                            {visit.alcohol_tags.length > 0 &&
+                              ` ・ ${visit.alcohol_tags.join("/")}`}
+                          </p>
+                        </div>
+                      </Link>
+                      {isOwn && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(visit)}
+                          aria-label="削除"
+                          className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-neutral-600 focus:ring-2 focus:ring-amber-400 active:bg-neutral-200"
+                        >
+                          🗑
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
 
           {hasMore && (
             <button

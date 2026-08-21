@@ -27,6 +27,13 @@ alter table venues add column if not exists category text not null default 'bar'
 -- is_wishedと同様にVenue側に持たせる。既存環境向けマイグレーション。
 alter table venues add column if not exists wish_reason text[];
 
+-- 場所のカテゴリ(公園/飲食店/お店/駅)。あしあとのカテゴリフィルターに使う。Google Places
+-- 候補から選んで登録した場合のみ判定でき、店名のみの手入力ではnull(未分類)のまま。
+alter table venues add column if not exists place_category text;
+alter table venues drop constraint if exists venues_place_category_check;
+alter table venues add constraint venues_place_category_check
+  check (place_category in ('food', 'park', 'shop', 'station') or place_category is null);
+
 create table if not exists visits (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references auth.users(id) on delete cascade,

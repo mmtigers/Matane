@@ -1,3 +1,4 @@
+import type { PlaceCategory } from "@/constants/choices";
 import type { LatLng } from "@/types/models";
 import { localDb, type LocalVenue, type LocalVisit } from "./localDb";
 import { findVenueByPlaceId, searchVenuesLocal } from "./queries";
@@ -34,6 +35,14 @@ function emptyVisitFields(): VisitChoiceFields & { ai_tags: string[] } {
   };
 }
 
+// 気になるリストに入っていた店へ実際にあしあと(訪問記録)が付いたら、そのVenueを
+// 気になるリストから外す。「気になる」は未訪問の店を保存しておく機能のため、
+// 訪問記録が作られた時点で役目を終える。
+async function clearWishIfNeeded(venue: LocalVenue) {
+  if (!venue.is_wished) return;
+  await localDb.venues.update(venue.id, { is_wished: false, syncStatus: "pending" });
+}
+
 // ホーム画面の「ココを記録」用。GPSで現在地を取得し、店名(空欄可)と写真1枚(任意)を
 // 確認するだけで、その場で完了(is_completed: true)まで一気に進める。誰と/予算感/
 // お酒の武器/静かさ等の詳細な肉付けは行わないため、二次登録画面を経由しない。
@@ -41,13 +50,14 @@ export async function createQuickCheckIn(
   location: LatLng,
   name: string,
   photoDataUrl: string | null,
-  place?: { placeId: string; address: string | null }
+  place?: { placeId: string; address: string | null; category?: PlaceCategory | null }
 ) {
   const existingVenue = place ? await findVenueByPlaceId(place.placeId) : undefined;
 
   let venueId: string;
   if (existingVenue) {
     venueId = existingVenue.id;
+    await clearWishIfNeeded(existingVenue);
   } else {
     venueId = crypto.randomUUID();
     const venue: LocalVenue = {
@@ -60,6 +70,7 @@ export async function createQuickCheckIn(
       is_wished: false,
       category: "family",
       wish_reason: null,
+      place_category: place?.category ?? null,
       syncStatus: "pending",
     };
     await localDb.venues.add(venue);
@@ -84,7 +95,12 @@ export async function createQuickCheckIn(
 // 重複防止はcreateQuickCheckInと同じ優先順位: place_id一致 → 完全一致店名。
 async function findOrCreateVenueByNameOrPlace(
   name: string,
-  place?: { placeId: string; address: string | null; location: LatLng | null }
+  place?: {
+    placeId: string;
+    address: string | null;
+    location: LatLng | null;
+    category?: PlaceCategory | null;
+  }
 ): Promise<string> {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
   if (!trimmed) throw new Error("店名を入力してください");
@@ -107,6 +123,7 @@ async function findOrCreateVenueByNameOrPlace(
     is_wished: false,
     category: "family",
     wish_reason: null,
+    place_category: place?.category ?? null,
     syncStatus: "pending",
   };
   await localDb.venues.add(venue);
@@ -119,7 +136,12 @@ async function findOrCreateVenueByNameOrPlace(
 // タグを合わせて保存する。Visit(来店記録)は作らない。
 export async function registerVenueFromPlace(
   name: string,
-  place?: { placeId: string; address: string | null; location: LatLng | null },
+  place?: {
+    placeId: string;
+    address: string | null;
+    location: LatLng | null;
+    category?: PlaceCategory | null;
+  },
   wishReason?: string[]
 ): Promise<string> {
   const venueId = await findOrCreateVenueByNameOrPlace(name, place);
@@ -136,9 +158,16 @@ export async function registerVenueFromPlace(
 // 登録(二次登録)画面へ遷移し、そのまま詳細情報(誰と/また行きたい/予算感等)を入力させる。
 export async function createNamedVisit(
   name: string,
-  place?: { placeId: string; address: string | null; location: LatLng | null }
+  place?: {
+    placeId: string;
+    address: string | null;
+    location: LatLng | null;
+    category?: PlaceCategory | null;
+  }
 ): Promise<string> {
   const venueId = await findOrCreateVenueByNameOrPlace(name, place);
+  const venue = await localDb.venues.get(venueId);
+  if (venue) await clearWishIfNeeded(venue);
 
   const visitId = crypto.randomUUID();
   const visit: LocalVisit = {
@@ -192,7 +221,7 @@ export async function setVenueName(
   visitId: string,
   venueId: string,
   name: string,
-  place?: { placeId: string; address: string | null }
+  place?: { placeId: string; address: string | null; category?: PlaceCategory | null }
 ) {
   const trimmed = name.trim().slice(0, VENUE_NAME_MAX_LENGTH);
 
@@ -205,13 +234,16 @@ export async function setVenueName(
       venue_id: existingVenue.id,
       syncStatus: "pending",
     });
+    await clearWishIfNeeded(existingVenue);
     return;
   }
 
   await localDb.venues.update(venueId, {
     name: trimmed,
     syncStatus: "pending",
-    ...(place ? { place_id: place.placeId, address: place.address } : {}),
+    ...(place
+      ? { place_id: place.placeId, address: place.address, place_category: place.category ?? null }
+      : {}),
   });
 }
 
