@@ -52,6 +52,23 @@ class MataneDB extends Dexie {
             if (!venue.category) venue.category = "bar";
           });
       });
+    // v4: あしあとのフィルターをお酒の種類から場所のカテゴリ(公園/飲食店/お店/駅)に
+    // 変更するため、Venueに場所のカテゴリを持たせる。既存データは判定できないためnull
+    // (未分類)で補完する。
+    this.version(4)
+      .stores({
+        venues: "id, place_id, syncStatus, category",
+        visits: "id, venue_id, visited_at, syncStatus",
+        pendingVisitDeletes: "id",
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table("venues")
+          .toCollection()
+          .modify((venue: LocalVenue) => {
+            if (venue.place_category === undefined) venue.place_category = null;
+          });
+      });
   }
 }
 

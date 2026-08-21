@@ -143,7 +143,7 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
           visitId,
           visit.venue.id,
           trimmedName,
-          place ? { placeId: place.placeId, address: place.address } : undefined
+          place ? { placeId: place.placeId, address: place.address, category: place.category } : undefined
         );
       }
 
