@@ -164,13 +164,13 @@ export default function TimelinePage() {
       </header>
 
       <div className="flex items-center gap-2">
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           {PLACE_CATEGORY_FILTERS.map(({ icon, label, category }) => (
             <button
               key={category}
               type="button"
               onClick={() => setActiveCategory((current) => (current === category ? null : category))}
-              className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-colors focus:ring-2 focus:ring-amber-400 ${
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-base transition-colors focus:ring-2 focus:ring-amber-400 ${
                 activeCategory === category ? "bg-amber-400" : "bg-neutral-100"
               }`}
               aria-label={label}
@@ -189,7 +189,7 @@ export default function TimelinePage() {
               if (event.target.value) handleJumpToMonth(event.target.value);
             }}
             aria-label="月を選んでジャンプ"
-            className="ml-auto rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+            className="ml-auto h-9 rounded-full border border-neutral-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
           >
             <option value="">月を選ぶ</option>
             {monthGroups.map((group) => (
@@ -208,18 +208,15 @@ export default function TimelinePage() {
       ) : (
         <div className="flex flex-col gap-6">
           {visibleGroups.map((group) => (
-            <section key={group.key} id={`month-${group.key}`} className="flex flex-col gap-3">
-              <h2 className="rounded-lg bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-600">
+            <section key={group.key} id={`month-${group.key}`} className="flex flex-col">
+              <h2 className="border-b border-neutral-200 pb-2 text-sm font-semibold text-neutral-700">
                 {group.label}
               </h2>
-              <ul className="flex flex-col gap-2">
+              <ul className="flex flex-col divide-y divide-neutral-200">
                 {group.visits.map((visit) => {
                   const isOwn = isOwnVisit(visit, session?.user.id, authLoading);
                   return (
-                    <li
-                      key={visit.id}
-                      className="flex items-center gap-2 rounded-xl bg-neutral-100 px-4 py-3"
-                    >
+                    <li key={visit.id} className="flex items-center gap-2 px-1 py-3">
                       <Link
                         href={
                           visit.is_completed
