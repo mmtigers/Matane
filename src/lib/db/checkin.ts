@@ -330,6 +330,27 @@ export async function toggleVenueWish(venueId: string, isWished: boolean) {
   scheduleBackgroundSync();
 }
 
+// 店舗詳細画面からのVenue削除(要件定義書6章: 自分/パートナーどちらが登録した
+// Venueも削除可能)。Supabase側はvisits.venue_idがon delete cascadeのため、
+// クラウドでVenueを削除すると紐づくVisits(パートナーの記録を含む)も連動して
+// 削除される。ローカルでも同じ結果になるよう、紐づくVisitsを先に削除してから
+// Venue自体を削除する。既にSupabaseへ同期済みだった場合はdeleteVisitと同様に
+// 削除キューへ積み、sync.tsの通常サイクルでクラウド側の削除も処理する。
+export async function deleteVenue(venueId: string) {
+  const venue = await localDb.venues.get(venueId);
+  if (!venue) return;
+
+  const relatedVisits = await localDb.visits.where("venue_id").equals(venueId).toArray();
+  await localDb.visits.bulkDelete(relatedVisits.map((v) => v.id));
+
+  await localDb.venues.delete(venueId);
+
+  if (venue.syncStatus === "synced") {
+    await localDb.pendingVenueDeletes.put({ id: venueId });
+    scheduleBackgroundSync();
+  }
+}
+
 // 店舗詳細画面で、位置情報が未設定のVenue(候補を選ばず店名だけで登録した過去の
 // あしあと・気になる)に、後からGoogle Places候補を選んで位置情報を追加設定するための
 // 関数。「ちかく」画面はlocationがある店舗しか地図に出せないため、この後付け設定が

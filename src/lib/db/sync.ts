@@ -300,6 +300,20 @@ export async function syncPendingChanges() {
         await localDb.pendingVisitDeletes.bulkDelete(ids);
       }
     }
+
+    // venues.venue_idはvisits側でon delete cascadeのため、この削除だけで紐づく
+    // Visits(パートナーの記録を含む)もクラウド側でまとめて消える。
+    const pendingVenueDeletes = await localDb.pendingVenueDeletes.toArray();
+    if (pendingVenueDeletes.length > 0) {
+      const ids = pendingVenueDeletes.map((d) => d.id);
+      const { error } = await supabase.from("venues").delete().in("id", ids);
+
+      if (error) {
+        console.warn(`venues削除の同期に失敗しました(${ids.length}件):`, error);
+      } else {
+        await localDb.pendingVenueDeletes.bulkDelete(ids);
+      }
+    }
   } catch (error) {
     console.warn("Supabaseへの同期をスキップしました:", error);
   } finally {
@@ -343,12 +357,16 @@ export async function pullFromCloud() {
     }
     const remoteVenues = (venuesData ?? []) as CloudVenueRow[];
 
-    // ローカルで削除済み・削除待ちのVisitをpullで復活させないようにする。
+    // ローカルで削除済み・削除待ちのVisit/Venueをpullで復活させないようにする。
     const pendingDeleteIds = new Set(
       (await localDb.pendingVisitDeletes.toArray()).map((d) => d.id)
     );
+    const pendingVenueDeleteIds = new Set(
+      (await localDb.pendingVenueDeletes.toArray()).map((d) => d.id)
+    );
 
     for (const row of remoteVenues) {
+      if (pendingVenueDeleteIds.has(row.id)) continue;
       const local = await localDb.venues.get(row.id);
       if (local?.syncStatus === "pending") continue;
       await localDb.venues.put(fromVenueRecord(row));

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   commuteDestinations as defaultCommuteDestinations,
@@ -9,12 +10,13 @@ import {
   getPriorityDestinationId,
   withCommuteOverrides,
 } from "@/config/commute";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PartnerAvatar } from "@/components/PartnerAvatar";
 import { PlaceCandidateList } from "@/components/PlaceCandidateList";
 import { Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { loadCommuteOverrides } from "@/lib/commuteSettings";
-import { attachVenueLocation, toggleVenueWish } from "@/lib/db/checkin";
+import { attachVenueLocation, deleteVenue, toggleVenueWish } from "@/lib/db/checkin";
 import { buildMemberEmailMap, isOwnVisit, useGroupMembers } from "@/lib/db/groups";
 import { useVenue, useVisitsForVenue } from "@/lib/db/queries";
 import { googleMapsUrl } from "@/lib/geo";
@@ -26,8 +28,11 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
   const { session, loading: authLoading } = useAuth();
   const groupMembers = useGroupMembers();
   const memberEmailById = useMemo(() => buildMemberEmailMap(groupMembers), [groupMembers]);
+  const router = useRouter();
   const [now, setNow] = useState(() => new Date());
   const [shareCopied, setShareCopied] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // 位置情報未設定のVenueに、Google Places候補から後付けで位置情報を設定するための状態。
   const [showLocationSearch, setShowLocationSearch] = useState(false);
   const [locationCandidates, setLocationCandidates] = useState<PlaceCandidate[]>([]);
@@ -106,6 +111,18 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
       setShowLocationSearch(false);
     } finally {
       setAttachingLocation(false);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!venue) return;
+    setConfirmingDelete(false);
+    setDeleting(true);
+    try {
+      await deleteVenue(venue.id);
+      router.push("/timeline");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -296,6 +313,26 @@ export function VenueDetailClient({ venueId }: { venueId: string }) {
           </ul>
         </section>
       )}
+
+      <button
+        type="button"
+        onClick={() => setConfirmingDelete(true)}
+        disabled={deleting}
+        className="rounded-full bg-neutral-100 py-3 text-sm font-semibold text-red-600 focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+      >
+        {deleting ? "削除中..." : "この店を削除する"}
+      </button>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        message={
+          visits.some((visit) => !isOwnVisit(visit, session?.user.id, authLoading))
+            ? `${venue.name || "この店"}を削除しますか？パートナーの記録を含む、この店の訪問記録もすべて削除されます。この操作は取り消せません。`
+            : `${venue.name || "この店"}を削除しますか？この店の訪問記録もすべて削除されます。この操作は取り消せません。`
+        }
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </main>
   );
 }
