@@ -13,12 +13,19 @@ export interface PendingVisitDelete {
   id: string;
 }
 
+// Venue削除も同様に、既に同期済みの行はその場でリモート削除せず一旦ここに積み、
+// sync.tsの通常サイクルでまとめて処理する(オフライン中の削除も再試行できるようにするため)。
+export interface PendingVenueDelete {
+  id: string;
+}
+
 // GPS取得直後にオフラインでも仮保存できるよう、Supabaseと同じ形のレコードを
 // IndexedDBにミラーリングし、通信回復時にsyncStatus: "pending"のものだけを送る。
 class MataneDB extends Dexie {
   venues!: Table<LocalVenue, string>;
   visits!: Table<LocalVisit, string>;
   pendingVisitDeletes!: Table<PendingVisitDelete, string>;
+  pendingVenueDeletes!: Table<PendingVenueDelete, string>;
 
   constructor() {
     super("matane-db");
@@ -69,6 +76,14 @@ class MataneDB extends Dexie {
             if (venue.place_category === undefined) venue.place_category = null;
           });
       });
+    // v5: Venue削除機能の追加に伴い、オフライン削除の再試行キューをVenue用にも追加。
+    // 既存ストアの形は変えないためDexieが自動でテーブル追加のみのマイグレーションを行う。
+    this.version(5).stores({
+      venues: "id, place_id, syncStatus, category",
+      visits: "id, venue_id, visited_at, syncStatus",
+      pendingVisitDeletes: "id",
+      pendingVenueDeletes: "id",
+    });
   }
 }
 

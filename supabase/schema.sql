@@ -377,6 +377,7 @@ drop policy if exists "venues are updatable by their creator" on venues;
 drop policy if exists "venues are readable by creator or group members" on venues;
 drop policy if exists "venues are insertable by authenticated users" on venues;
 drop policy if exists "venues are updatable by creator or group members" on venues;
+drop policy if exists "venues are deletable by creator or group members" on venues;
 
 create policy "venues are readable by creator or group members"
   on venues for select
@@ -419,6 +420,24 @@ create policy "venues are updatable by creator or group members"
     )
   )
   with check (
+    created_by = auth.uid()
+    or exists (
+      select 1
+      from group_members gm_self
+      join group_members gm_owner on gm_owner.group_id = gm_self.group_id
+      where gm_self.user_id = auth.uid()
+        and gm_owner.user_id = venues.created_by
+    )
+  );
+
+-- 削除もupdateと同じ範囲(作成者+同じグループのメンバー)に開放する
+-- (要件定義書6章の権限マトリクス: パートナーが登録したVenueも削除可)。
+-- visitsのvenue_idはon delete cascadeのため、Venue削除に伴い紐づくVisits
+-- (パートナーの記録を含む)も連動して削除される。
+create policy "venues are deletable by creator or group members"
+  on venues for delete
+  to authenticated
+  using (
     created_by = auth.uid()
     or exists (
       select 1

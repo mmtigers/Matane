@@ -92,12 +92,14 @@ export function useCompletedVisitCount() {
 // 完全にサイレントにならないよう、ユーザー自身がここで気づけるようにする。
 export function usePendingSyncCount() {
   return useLiveQuery(async () => {
-    const [pendingVenues, pendingVisits, pendingDeletes] = await Promise.all([
-      localDb.venues.where("syncStatus").equals("pending").count(),
-      localDb.visits.where("syncStatus").equals("pending").count(),
-      localDb.pendingVisitDeletes.count(),
-    ]);
-    return pendingVenues + pendingVisits + pendingDeletes;
+    const [pendingVenues, pendingVisits, pendingVisitDeletes, pendingVenueDeletes] =
+      await Promise.all([
+        localDb.venues.where("syncStatus").equals("pending").count(),
+        localDb.visits.where("syncStatus").equals("pending").count(),
+        localDb.pendingVisitDeletes.count(),
+        localDb.pendingVenueDeletes.count(),
+      ]);
+    return pendingVenues + pendingVisits + pendingVisitDeletes + pendingVenueDeletes;
   }, []);
 }
 
