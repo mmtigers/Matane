@@ -36,8 +36,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          // 成功レスポンスのみキャッシュする(下の同一オリジンGETと同じ理由: 一時的な
+          // 5xx/404をキャッシュすると、オフライン時のフォールバックがそのエラーページに
+          // 差し替わってしまい、原因解消後もエラーが表示され続けてしまう)。
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         })
         .catch(() => caches.match(request).then((cached) => cached || caches.match("/")))

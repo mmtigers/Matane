@@ -6,7 +6,9 @@ create extension if not exists postgis;
 
 create table if not exists venues (
   id uuid primary key default uuid_generate_v4(),
-  place_id text unique,
+  -- 重複排除キー。unique制約は下の「グループ単位の重複排除」ブロックで
+  -- owner_group_idと組み合わせたスコープ付きindexとして定義するため、ここでは付けない。
+  place_id text,
   name text not null check (char_length(name) <= 100),
   location geography(point, 4326),
   address text,
@@ -93,6 +95,59 @@ create table if not exists group_invites (
 
 create index if not exists idx_group_members_group_id on group_members(group_id);
 create index if not exists idx_group_invites_group_id on group_invites(group_id);
+
+-- place_idのグループ単位の重複排除。旧スキーマではplace_idに単純なunique制約を
+-- 付けていたが、これは全ユーザー横断でグローバルに一意になってしまい、venuesの
+-- SELECTポリシー(作成者または同じグループのメンバーのみ可視。下で定義)と食い違って
+-- いた: 無関係な別グループの2人が同じ実店舗(同じGoogle place_id)へチェックインすると、
+-- 後から書き込んだ側はunique_violationになり、かつRLSにより先に存在する行が
+-- 見えないため sync.ts の reconcileDuplicatePlaceId でも解決できず、当該Venue/Visit
+-- が永久にsyncStatus: "pending"のまま同期に失敗し続ける不具合があった
+-- (docs/REQUIREMENTS_group_sharing.md 8章が想定する「グループごとに別レコードになる」
+-- という挙動になっていなかった)。
+--
+-- owner_group_id は作成時点の作成者の所属グループを記録する列で、以後は
+-- (place_id, coalesce(owner_group_id, created_by)) の組で重複排除する。これにより
+-- 「同じグループ内での重複」は従来どおり防ぎつつ、「別グループ(または未所属同士)の
+-- 同一店舗」は別レコードとして共存できるようになる(要件定義書8章の想定どおり)。
+alter table venues add column if not exists owner_group_id uuid references groups(id);
+
+-- 既存環境向けマイグレーション: 導入時点で未設定の行に、作成者の現在の所属グループを
+-- 一度だけ補完する(以後はINSERT時にトリガーが設定するため、この一括更新は再実行しても
+-- 既に値が入っている行には触れない=冪等)。
+update venues v
+set owner_group_id = gm.group_id
+from group_members gm
+where gm.user_id = v.created_by
+  and v.owner_group_id is null;
+
+create or replace function set_venue_owner_group()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  select gm.group_id into new.owner_group_id
+  from group_members gm
+  where gm.user_id = new.created_by;
+  return new;
+end;
+$$;
+
+drop trigger if exists venues_set_owner_group on venues;
+
+create trigger venues_set_owner_group
+  before insert on venues
+  for each row execute function set_venue_owner_group();
+
+-- 既存環境向けマイグレーション: 旧グローバルunique制約が残っていれば削除する
+-- (inline `unique`指定時にPostgresが自動生成する制約名)。
+alter table venues drop constraint if exists venues_place_id_key;
+
+create unique index if not exists venues_place_id_owner_group_key
+  on venues (place_id, coalesce(owner_group_id, created_by))
+  where place_id is not null;
 
 alter table venues enable row level security;
 alter table visits enable row level security;
