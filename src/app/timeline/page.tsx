@@ -7,6 +7,7 @@ import {
   PLACE_CATEGORY_LABELS,
   PLACE_CATEGORY_OPTIONS,
   type PlaceCategory,
+  type Who,
 } from "@/constants/choices";
 import { PartnerAvatar } from "@/components/PartnerAvatar";
 import { SkeletonList } from "@/components/Skeleton";
@@ -23,8 +24,25 @@ const PLACE_CATEGORY_FILTERS = PLACE_CATEGORY_OPTIONS.map((category) => ({
   label: PLACE_CATEGORY_LABELS[category],
 }));
 
+// 「誰と」タグのうち仕事関連は「仕事/上司」のみのため、これを含むかどうかで
+// 仕事/プライベートを判定する(新規の入力項目を増やさずに済ませるため)。
+const WORK_WHO_TAG: Who = "仕事/上司";
+type PurposeFilter = "all" | "work" | "private";
+const PURPOSE_FILTERS: { key: PurposeFilter; label: string; icon: string }[] = [
+  { key: "all", label: "すべて", icon: "🗂" },
+  { key: "work", label: "仕事", icon: "💼" },
+  { key: "private", label: "プライベート", icon: "🏠" },
+];
+
+function matchesPurpose(visit: VisitWithVenue, purpose: PurposeFilter): boolean {
+  if (purpose === "all") return true;
+  const isWork = visit.who.includes(WORK_WHO_TAG);
+  return purpose === "work" ? isWork : !isWork;
+}
+
 const MONTHS_PER_PAGE = 6;
 const FILTER_STORAGE_KEY = "matane:timelineFilter";
+const PURPOSE_FILTER_STORAGE_KEY = "matane:timelinePurposeFilter";
 const SAVED_TOAST_VALID_MS = 5000;
 const TOAST_VISIBLE_MS = 2000;
 const DELETE_UNDO_VISIBLE_MS = 5000;
@@ -62,6 +80,8 @@ export default function TimelinePage() {
   // sessionStorageはSSR側で読めないため、初期値はSSRと揃えてnullにし、マウント後の
   // effectで復元する(hydrationミスマッチを避けるため)。
   const [activeCategory, setActiveCategory] = useState<PlaceCategory | null>(null);
+  // 仕事/プライベートフィルターも同様にセッション内で覚えておく。
+  const [purposeFilter, setPurposeFilter] = useState<PurposeFilter>("all");
   const [visibleMonthCount, setVisibleMonthCount] = useState(MONTHS_PER_PAGE);
   // 保存直後の遷移など、一時的な単発メッセージをまとめて扱う
   // (同時に出さない前提のため単一の状態で十分)。
@@ -89,6 +109,18 @@ export default function TimelinePage() {
   }, [activeCategory]);
 
   useEffect(() => {
+    const stored = window.sessionStorage.getItem(PURPOSE_FILTER_STORAGE_KEY);
+    if (stored === "work" || stored === "private") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorageの値はSSR時点で読めないため、マウント後に一度だけ反映する
+      setPurposeFilter(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.sessionStorage.setItem(PURPOSE_FILTER_STORAGE_KEY, purposeFilter);
+  }, [purposeFilter]);
+
+  useEffect(() => {
     const raw = window.sessionStorage.getItem(SAVED_TOAST_KEY);
     if (!raw) return;
     window.sessionStorage.removeItem(SAVED_TOAST_KEY);
@@ -112,9 +144,10 @@ export default function TimelinePage() {
 
   const filtered = useMemo(() => {
     if (!visits) return [];
-    if (!activeCategory) return visits;
-    return visits.filter((visit) => visit.venue?.place_category === activeCategory);
-  }, [visits, activeCategory]);
+    return visits
+      .filter((visit) => matchesPurpose(visit, purposeFilter))
+      .filter((visit) => !activeCategory || visit.venue?.place_category === activeCategory);
+  }, [visits, activeCategory, purposeFilter]);
 
   const monthGroups = useMemo(() => groupByMonth(filtered), [filtered]);
   const visibleGroups = useMemo(
@@ -162,6 +195,24 @@ export default function TimelinePage() {
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-bold">あしあと</h1>
       </header>
+
+      <div className="flex gap-2">
+        {PURPOSE_FILTERS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setPurposeFilter(item.key)}
+            aria-pressed={purposeFilter === item.key}
+            className={`flex-1 rounded-full px-3 py-2 text-sm font-medium transition-colors focus:ring-2 focus:ring-amber-400 ${
+              purposeFilter === item.key
+                ? "bg-amber-400 text-black"
+                : "bg-neutral-100 text-neutral-700 active:bg-neutral-200"
+            }`}
+          >
+            {item.icon} {item.label}
+          </button>
+        ))}
+      </div>
 
       <div className="flex items-center gap-2">
         <div className="flex gap-1.5">
