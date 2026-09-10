@@ -103,11 +103,12 @@ docs/
 
 ```bash
 npm run lint       # ESLint
+npm run test       # Vitest（ユニットテスト）
 npm run build      # 型チェック込みの本番ビルド
 npm run test:e2e   # Playwright E2E（devサーバーを自動起動して実行）
 ```
 
-push・PR毎に `.github/workflows/ci.yml` が上記3つを自動実行する。
+push・PR毎に `.github/workflows/ci.yml` が上記4つを自動実行する。
 
 ## 開発の原則（要約）
 
