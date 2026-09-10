@@ -1,6 +1,13 @@
 import type { VisitWithVenue } from "@/lib/db/queries";
 
-function escapeCsvField(value: string): string {
+// 先頭が=,+,-,@の値をExcel等で開くと数式として実行されうる(CSVインジェクション)ため、
+// OWASP推奨の対策として無害化のためのシングルクォートを先頭に付与する。
+function sanitizeCsvFormulaPrefix(value: string): string {
+  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
+function escapeCsvField(rawValue: string): string {
+  const value = sanitizeCsvFormulaPrefix(rawValue);
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 

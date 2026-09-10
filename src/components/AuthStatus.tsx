@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { localDb } from "@/lib/db/localDb";
 import { usePendingSyncCount } from "@/lib/db/queries";
 import { getSupabaseClient } from "@/lib/supabase/client";
 
@@ -12,6 +13,15 @@ export function AuthStatus() {
   async function handleLogout() {
     try {
       await getSupabaseClient().auth.signOut();
+      // 共有端末で前ユーザーのローカルデータが残り、次にログインした別ユーザーの
+      // アカウントへ誤同期されるのを防ぐため、ログアウト時にローカルDexie DBを
+      // 全テーブルクリアする(#40)。
+      await Promise.all([
+        localDb.venues.clear(),
+        localDb.visits.clear(),
+        localDb.pendingVisitDeletes.clear(),
+        localDb.pendingVenueDeletes.clear(),
+      ]);
     } catch (error) {
       console.error(error);
     }
