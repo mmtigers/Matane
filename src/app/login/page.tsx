@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { isNetworkError, NETWORK_ERROR_MESSAGE_JA } from "@/lib/errors";
 import { getSupabaseClient } from "@/lib/supabase/client";
 
 const COOLDOWN_SECONDS = 30;
@@ -65,8 +66,15 @@ export default function LoginPage() {
       setCooldown(COOLDOWN_SECONDS);
       setSent(true);
     } catch (error) {
+      // オフライン・DNS失敗・CORS等でfetch自体が失敗すると、supabase-jsは
+      // 「Failed to fetch」等のブラウザ生の英語メッセージを投げてくる。日本語UIの中に
+      // そのまま出すと意味不明になるため、通信不達は専用のわかりやすい文言に差し替える。
       setErrorMessage(
-        error instanceof Error ? error.message : "ログインリンクの送信に失敗しました"
+        isNetworkError(error)
+          ? NETWORK_ERROR_MESSAGE_JA
+          : error instanceof Error
+            ? error.message
+            : "ログインリンクの送信に失敗しました"
       );
     } finally {
       setSending(false);

@@ -15,23 +15,10 @@ import {
   leaveGroup,
 } from "@/lib/db/groups";
 import { pullFromCloud } from "@/lib/db/sync";
+import { describeErrorForUser } from "@/lib/errors";
 import type { Group, GroupInvite, GroupMemberProfile } from "@/types/models";
 
 const SHARE_COPIED_VISIBLE_MS = 2000;
-
-// supabase-jsはHTTPレベルのエラー(PostgrestError等、Errorのサブクラス)だけでなく、
-// fetch自体が失敗した場合(DNS/CORS/オフライン等)は素のオブジェクト
-// { message, name, ... } を投げてくる。instanceof Errorだけで判定すると
-// このケースを取りこぼしString(error)が"[object Object]"になってしまうため、
-// messageプロパティの有無でも判定する。
-function describeError(error: unknown): string | null {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string") return message;
-  }
-  return null;
-}
 
 export default function GroupPage() {
   const { session, loading: authLoading } = useAuth();
@@ -75,10 +62,7 @@ export default function GroupPage() {
     refresh()
       .catch((error) => {
         console.error(error);
-        const detail = describeError(error);
-        setErrorMessage(
-          detail ? `グループ情報の取得に失敗しました(${detail})` : "グループ情報の取得に失敗しました"
-        );
+        setErrorMessage(describeErrorForUser(error, "グループ情報の取得に失敗しました"));
       })
       .finally(() => setLoading(false));
   }, [authLoading, session, refresh]);
@@ -106,7 +90,7 @@ export default function GroupPage() {
       setGroup(newGroup);
     } catch (error) {
       console.error(error);
-      setErrorMessage(describeError(error) ?? "グループの作成に失敗しました");
+      setErrorMessage(describeErrorForUser(error, "グループの作成に失敗しました"));
       setCreating(false);
       return;
     }
@@ -119,11 +103,11 @@ export default function GroupPage() {
       setInvite(await createInvite(newGroup.id));
     } catch (error) {
       console.error(error);
-      const detail = describeError(error);
       setErrorMessage(
-        `グループを作成しましたが、招待コードの発行に失敗しました。下のボタンから発行し直してください${
-          detail ? `(${detail})` : ""
-        }`
+        describeErrorForUser(
+          error,
+          "グループを作成しましたが、招待コードの発行に失敗しました。下のボタンから発行し直してください"
+        )
       );
     } finally {
       setCreating(false);
@@ -138,7 +122,7 @@ export default function GroupPage() {
       setJoinCodeInput("");
     } catch (error) {
       console.error(error);
-      setErrorMessage(describeError(error) ?? "参加に失敗しました");
+      setErrorMessage(describeErrorForUser(error, "参加に失敗しました"));
       setJoining(false);
       return;
     }
@@ -162,7 +146,7 @@ export default function GroupPage() {
       setInvite(await createInvite(group.id));
     } catch (error) {
       console.error(error);
-      setErrorMessage(describeError(error) ?? "招待コードの発行に失敗しました");
+      setErrorMessage(describeErrorForUser(error, "招待コードの発行に失敗しました"));
     } finally {
       setIssuingInvite(false);
     }
@@ -198,7 +182,7 @@ export default function GroupPage() {
       void pullFromCloud();
     } catch (error) {
       console.error(error);
-      setErrorMessage("グループを抜ける処理に失敗しました");
+      setErrorMessage(describeErrorForUser(error, "グループを抜ける処理に失敗しました"));
     } finally {
       setLeaving(false);
     }
