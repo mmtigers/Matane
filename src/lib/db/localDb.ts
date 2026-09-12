@@ -88,3 +88,14 @@ class MataneDB extends Dexie {
 }
 
 export const localDb = new MataneDB();
+
+// 共有端末で前ユーザーのローカルデータが残り、次にログインした別ユーザーの
+// アカウントへ誤同期されるのを防ぐため、ログアウト時にこれを呼ぶ(#40)。
+// クリア対象のテーブル名を列挙せずDexieのtablesを走査するのは、将来
+// version(N).stores()でテーブルを増やしたときにクリア漏れが起きると
+// #40と同じ事故がそのまま再発するため(列挙方式だと追加箇所が離れていて気づけない)。
+export async function clearLocalData(): Promise<void> {
+  await localDb.transaction("rw", localDb.tables, async () => {
+    await Promise.all(localDb.tables.map((table) => table.clear()));
+  });
+}
