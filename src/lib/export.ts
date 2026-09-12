@@ -37,6 +37,10 @@ export function visitsToCsv(visits: VisitWithVenue[]): string {
 
 function escapeIcsText(value: string): string {
   return value
+    // \r\n・単独の\rも含め改行表現を\nへ正規化してから\\nへエスケープする。
+    // 未正規化のままだと、書き出し時に全体を\r\nで結合するのと合わさって、
+    // 緩いICSパーサーに本来の行区切りと誤認識されうる(iCalendarインジェクション対策)。
+    .replace(/\r\n|\r/g, "\n")
     .replace(/\\/g, "\\\\")
     .replace(/;/g, "\\;")
     .replace(/,/g, "\\,")

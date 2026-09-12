@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VisitWithVenue } from "@/lib/db/queries";
 import type { LocalVenue } from "@/lib/db/localDb";
-import { visitsToCsv } from "./export";
+import { visitsToCsv, visitsToIcs } from "./export";
 
 function makeVenue(overrides: Partial<LocalVenue> = {}): LocalVenue {
   return {
@@ -74,5 +74,32 @@ describe("visitsToCsv - CSVインジェクション対策", () => {
     const dataLine = csv.split("\r\n")[1];
 
     expect(dataLine).toContain('"\'=1,2"');
+  });
+});
+
+describe("visitsToIcs - iCalendarインジェクション対策", () => {
+  it.each([
+    ["\r\n", "CRLF"],
+    ["\r", "CR単体"],
+  ])("店名に%s(%s)が含まれていても本物の行区切りとして解釈されない", (lineBreak) => {
+    const ics = visitsToIcs([
+      makeVisit({ venue: makeVenue({ name: `いろは${lineBreak}BEGIN:VEVENT` }) }),
+    ]);
+    const lines = ics.split("\r\n");
+
+    // SUMMARY行が1行に収まっており、注入した文字列が新しいVEVENT行として
+    // 分離されていないこと(=\nへ正規化された上で\\nエスケープされていること)を検証する。
+    const summaryLine = lines.find((line) => line.startsWith("SUMMARY:"));
+    expect(summaryLine).toBe("SUMMARY:いろは\\nBEGIN:VEVENT");
+    expect(lines.filter((line) => line === "BEGIN:VEVENT")).toHaveLength(1);
+  });
+
+  it("メモ内の\\r\\nと単独\\rが混在しても、どちらも\\\\nへ正規化してエスケープする", () => {
+    const ics = visitsToIcs([makeVisit({ memo: "1軒目\r\n2軒目\r3軒目" })]);
+    const descriptionLine = ics
+      .split("\r\n")
+      .find((line) => line.startsWith("DESCRIPTION:"));
+
+    expect(descriptionLine).toBe("DESCRIPTION:メモ: 1軒目\\n2軒目\\n3軒目");
   });
 });

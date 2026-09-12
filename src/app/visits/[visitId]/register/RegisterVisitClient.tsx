@@ -52,6 +52,10 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
   const [quietness, setQuietness] = useState<Quietness[]>([]);
   const [memo, setMemo] = useState("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  // 「削除」操作で表示上は即座に消すが、Supabase Storage側の実体削除はhandleSaveの
+  // 成功後まで遅延させるためのフラグ(保存せず離脱した場合に写真だけ消えてしまう
+  // 不整合を防ぐ)。
+  const [pendingPhotoRemoval, setPendingPhotoRemoval] = useState(false);
   const [compressing, setCompressing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -117,11 +121,12 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
     if (libraryInputRef.current) libraryInputRef.current.value = "";
 
     // 既にSupabase Storageへアップロード済みの写真(data URLではなくURL化されている)
-    // だった場合のみ、クラウド側の実体オブジェクトも削除する。ローカルでの保存(handleSave)
-    // を待たずに削除してよい(このvisitIdへの写真は常に1枚で、キー衝突が起きないため)。
-    const userId = session?.user.id;
-    if (userId && visit?.best_photo && !visit.best_photo.startsWith("data:")) {
-      void removeVisitPhoto(visitId, userId);
+    // だった場合のみ、クラウド側の実体オブジェクトも削除対象としてマークする。実際の
+    // 削除はhandleSaveの保存成功後まで遅延させる(ここで即削除すると、保存せずに
+    // 離脱してもStorage側の写真だけ消えてしまい、フォームの他の編集が破棄されるのに
+    // 写真だけ確定してしまう不整合が起きるため)。
+    if (visit?.best_photo && !visit.best_photo.startsWith("data:")) {
+      setPendingPhotoRemoval(true);
     }
   }
 
@@ -161,6 +166,12 @@ export function RegisterVisitClient({ visitId }: { visitId: string }) {
         memo: memo.trim() ? memo.trim() : null,
         ...(visitedAtChanged ? { visited_at: newVisitedAt } : {}),
       });
+
+      // 保存が確定した後にだけ、削除マークされた旧写真のStorage実体を消す。
+      const userId = session?.user.id;
+      if (pendingPhotoRemoval && userId) {
+        void removeVisitPhoto(visitId, userId);
+      }
 
       // タイムライン側で「保存しました」トーストを出すための一時フラグ。
       window.sessionStorage.setItem(SAVED_TOAST_KEY, String(Date.now()));
